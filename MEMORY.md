@@ -60,6 +60,18 @@ Se reescribió el sketch: LDR en A0 (luces automáticas), riego AM/PM, motor de 
 - [x] `diagrama_conexion.svg/.png` actualizado (LDR, L293D, A2 en el teclado, PCF8574A + LM044L).
 - [ ] Probar el circuito completo en Proteus.
 
+## Pantalla 16x2 de la hora del DS1307 (4 oct 2026)
+
+El usuario añadió un LCD 16x2 por I2C (dirección `$7C` en el debugger = **0x3E** en 7 bits) para ver la hora que da el DS1307. El sketch crea `lcd2` (`LcdI2C(0x3E, 16, 2)`), con búsqueda automática de otro expansor si 0x3E no responde, y lee el DS1307 cada segundo real (`mostrarRtc`). Con el reloj acelerado escribe la hora simulada en el DS1307 cada segundo real. Cuesta 2 transferencias I2C cortas por segundo, a cambio de ver la lectura real.
+- **Hallazgo:** el `Program File` del ATmega328P apuntaba a `AppData\Local\Temp\VSM Studio\...` (compilación de VSM Studio de las 19:10) con una **copia vieja** del sketch (con fecha, sin display de 7 seg ni causa de reinicio). Cargar `build\sistema_casa.ino.hex` o volver a pegar el sketch en `main.ino`. Reloj descartado como causa: CKDIV8 sin programar, cristal externo, 16 MHz.
+- La pantalla es el módulo `JHD-2X16-I2C` de Proteus (solo VDD, VSS, SCL, SDA; sin pines A0–A2 ni RS/E/D4–D7). **No verificado** que hable el protocolo del PCF8574 que asume `LcdI2C`; si queda en blanco, mirar en el I2C Debugger los bytes que recibe `$7C` y escribir un controlador propio.
+- El debugger mostró `S 70 A` (20x4) y `S 7C A` (16x2): las dos responden, pero la 16x2 salió en blanco con `LcdI2C`. Se añadió un controlador de comandos (`LCD2_JHD 1`: control 0x80/0x40, init `38,38,0C,01,06`). Si sigue en blanco, copiar los bytes que recibe `$7C` en el I2C Debugger.
+- [x] **Verificado en Proteus (4 oct 2026):** con `LCD2_JHD 1` la 16x2 muestra la hora del DS1307. El módulo `JHD-2X16-I2C` usa el protocolo de comandos (control 0x80/0x40), no el del PCF8574.
+
+## Decisión: sin fecha (4 oct 2026)
+
+El usuario aclaró que **no necesita días ni años**: todo es un contador de 24 h y eventos a la hora programada. Se eliminó del sketch y de la documentación la edición de fecha (`P_FECHA`, tecla `3`, `rtcSetFecha`, `diasMes`, opción de menú). `struct Hora` solo tiene h, m, s; `relojAvanzar` suma módulo 86 400; el DS1307 solo se lee/escribe en 3 registros. Menú de 6 opciones. Las secciones siguientes que mencionan fecha son historial.
+
 ## Hora, fecha y rendimiento (4 oct 2026)
 
 La simulación iba lenta. Causa más probable (no medida): el LCD 20x4 por I2C, más las lecturas/escrituras al DS1307 cada 500 ms y cada segundo (acelerado), más un `loop` que giraba en vacío. Cambios en el sketch:
@@ -77,6 +89,12 @@ La simulación iba lenta. Causa más probable (no medida): el LCD 20x4 por I2C, 
 - Con `FIJAR_HORA_AL_ARRANCAR 1`, cada arranque fija 01/01/26 05:55 (demo repetible); se pierde la fecha editada al reiniciar la simulación.
 - Se crearon `MANUAL_USUARIO.md` y `MANUAL_TECNICO.md`; se actualizaron `README.md`, `PROTEUS.md` y el diagrama (etiquetas `F1`/`F2` y pantalla de ejemplo).
 - El diagrama se editó a mano en el SVG y el PNG se generó con Chrome headless (el script de Python original no está en el repo).
+- Revisión del esquema de Proteus (captura del 4 oct 2026): L293D con VS a +12 V (documentado), **EN1 sin conectar y VSS a GND** (hay que corregirlos: EN1 y VSS a +5 V), segundo motor en OUT3/OUT4 sin IN3/IN4/EN2, DS1307 con SOUT a +5 V directo (dejarlo libre o con pull-up), I2C Debugger y voltímetro abiertos (consumen CPU). El LCD se veía en "Iniciando..." al inicio: confirmar que pasa a la pantalla de estado.
+- [x] Esquema corregido por el usuario: EN1, EN2 y VSS del L293D a +5 V; IN3/IN4 a IO9/IO10 (segundo motor en paralelo). Falta VS (pin 8) a +12 V (en la última captura seguía sin cable).
+- [ ] SOUT del DS1307 libre (en la captura anterior aparecía a +5 V).
+- Display de 7 segmentos con el tiempo de riego (MM:SS): 4 × 74HC595 en cadena + 4 × 7SEG-COM-CATHODE, estático; D3 = SER, A3 = SRCLK, D13 = RCLK (D13 antes se usaba para un LED de latido, que ahora son los dos puntos del display). Documentado en README, PROTEUS, manuales y diagrama.
+- El usuario reportó que **el Arduino se reinicia solo**. Se agregó `[DBG] ... reinicio por: ...` (lee MCUSR). Pendiente: ver qué causa indica (PIN-RESET → esquema; BROWN-OUT → alimentación; SALTO-A-0 → fallo del programa).
+- [ ] Probar el display de 7 segmentos en Proteus.
 - [ ] Verificar con `mksketch` (arduino-cli no detecta los prototipos con tipos propios).
 - [ ] Comprobar en Proteus que el teclado responde bien a 100 Hz y medir si mejoró la velocidad.
 - [ ] Si sigue lenta: probar `Wire.setClock(400000)` (el modelo del DS1307/PCF de Proteus podría no tolerarlo).

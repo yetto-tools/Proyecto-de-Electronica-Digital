@@ -8,7 +8,7 @@ Proyecto del curso de **Electrónica Digital (UMG)**. Sistema domótico basado e
 - **Riego del jardín programado**: una ventana de mañana y una de tarde, con hora de inicio y fin configurables.
 - **Cortinas con motor DC** (puente H L293D): se abren y cierran por horario o manualmente con el teclado.
 - **Configuración desde teclado 4x4** y pantalla LCD 20x4; los valores se guardan en EEPROM.
-- **Reloj editable**: hora y fecha se ajustan desde el teclado; la velocidad (x1, x10, x60, x300) se cambia sin recompilar para las demostraciones.
+- **Reloj de 24 h editable**: el sistema trabaja solo con la hora del día (`HH:MM:SS`), sin fecha; los eventos ocurren a la hora programada. La hora se ajusta desde el teclado y la velocidad (x1, x10, x60, x300) se cambia sin recompilar para las demostraciones.
 
 Todo corre en **un solo Arduino Nano v3**.
 
@@ -19,8 +19,9 @@ Todo corre en **un solo Arduino Nano v3**.
 | Microcontrolador | Arduino Nano v3 (ATmega328P, 16 MHz) |
 | Reloj de tiempo real | DS1307 (I2C, 0x68) con cristal de 32.768 kHz |
 | Pantalla | LCD 20x4 (LM044L) mediante expansor PCF8574A (I2C, 0x38) |
+| Pantalla 2 | Módulo LCD 16x2 I2C `JHD-2X16-I2C` (4 pines: VDD, VSS, SCL, SDA), dirección `0x3E` (`$7C` en el I2C Debugger): muestra la hora tal como la lee el DS1307 |
 | Entrada | Teclado matricial 4x4, LDR (luz) |
-| Salidas | Riego (D7), luces (D8), motor de cortina por L293D (D9 abrir, D10 cerrar) |
+| Salidas | Riego (D7), luces (D8), motor de cortina por L293D (D9 abrir, D10 cerrar), display de 7 segmentos con el tiempo de riego (D3, A3, D13) |
 
 El diagrama pictórico está en [`diagrama_conexion.png`](diagrama_conexion.png); la asignación de pines, el guion de demostración y la solución de problemas están en [`PROTEUS.md`](PROTEUS.md).
 
@@ -44,6 +45,9 @@ Pines del Nano según el conector de 30 pines (`TX1`=1 … `D2`=5 … `A0`=19 �
 | D12 | 15 | Columna 2 teclado | KEYPAD `COL2` |
 | A2 | 21 | Columna 3 teclado | KEYPAD `COL3` |
 | A1 | 20 | Columna 4 teclado | KEYPAD `COL4` |
+| D3 | 6 | Display 7 seg: dato | 74HC595 #1, pin 14 (`SER`) |
+| A3 | 22 | Display 7 seg: reloj | `SRCLK` (pin 11) de los cuatro 74HC595 |
+| D13 | 16 | Display 7 seg: latch | `RCLK` (pin 12) de los cuatro 74HC595 |
 | A0 | 19 | Luz ambiente | Unión LDR – resistencia de 10 kΩ |
 | A4 | 23 | SDA (I2C) | DS1307 pin 5, PCF8574A pin 15, pull-up 4.7 kΩ a +5 V |
 | A5 | 24 | SCL (I2C) | DS1307 pin 6, PCF8574A pin 14, pull-up 4.7 kΩ a +5 V |
@@ -51,7 +55,24 @@ Pines del Nano según el conector de 30 pines (`TX1`=1 … `D2`=5 … `A0`=19 �
 | 5V | 27 | Alimentación | Todos los puntos +5 V |
 | GND | 29 | Masa | Todos los puntos GND |
 
-Los pines D0, D3, D13, A3, A6 y A7 quedan libres.
+Los pines D0 (RX serie), A6 y A7 quedan libres.
+
+### Display de 7 segmentos (tiempo de riego, MM:SS)
+
+Cuatro dígitos `7SEG-COM-CATHODE`, cada uno con su `74HC595`, los cuatro en cadena (sin multiplexar, sin refresco). Cadena: Nano `D3` → 595 #1 (decenas de minuto) → #2 → #3 → #4 (unidades de segundo).
+
+| Pin 74HC595 | Nombre | Se conecta a |
+|---|---|---|
+| 14 | SER | #1: Nano D3 · #2, #3, #4: `QH'` (pin 9) del 595 anterior |
+| 11 | SRCLK | Nano A3 (los cuatro) |
+| 12 | RCLK | Nano D13 (los cuatro) |
+| 13 | OE | GND |
+| 10 | SRCLR | +5 V |
+| 16 / 8 | VCC / GND | +5 V / GND |
+| 15, 1, 2, 3, 4, 5, 6 | QA … QG | Segmentos a, b, c, d, e, f, g del dígito |
+| 7 | QH | Punto decimal (en el 2.º dígito hace de dos puntos) |
+
+El cátodo común de cada dígito va a GND. En un circuito real, 330 Ω en serie con cada segmento. El display cuenta desde `00:00` cuando empieza el riego y conserva la duración al terminar.
 
 ### Teclado 4x4 (KEYPAD-SMALLCALC)
 
@@ -88,11 +109,13 @@ Sin resistencias externas: el sketch usa los pull-up internos del ATmega (librer
 | 4, 5 | GND | GND |
 | 6 | 2Y | Motor, terminal 2 |
 | 7 | 2A | Nano D10 |
-| 8 | VCC2 | +5 V (alimentación del motor) |
-| 16 | VCC1 | +5 V |
+| 8 | VCC2 (`VS` en Proteus) | **+12 V** (alimentación del motor; el motor `MOTOR` de Proteus es de 12 V. Con un motor de 5 V, usar +5 V) |
+| 16 | VCC1 (`VSS` en Proteus) | **+5 V** (lógica; no conectarlo a GND) |
 | 9–15 | EN2, 3A, 3Y, 12-13 GND, 4Y, 4A | Sin conectar (pines 12 y 13 a GND) |
 
-Abrir = D9 en alto y D10 en bajo; cerrar = D9 en bajo y D10 en alto; detenido = ambos en bajo.
+Abrir = D9 en alto y D10 en bajo; cerrar = D9 en bajo y D10 en alto; detenido = ambos en bajo. **EN1 (pin 1) debe estar a +5 V**: sin eso el canal no se habilita y el motor no gira. La masa de la fuente de 12 V se une a la del Arduino.
+
+**Segundo motor (opcional):** el sketch solo maneja el canal 1 (OUT1/OUT2). Si se dibuja un segundo motor en OUT3 (pin 11) y OUT4 (pin 14), para que gire junto con el primero: IN3 (pin 10) a D9, IN4 (pin 15) a D10 y EN2 (pin 9) a +5 V.
 
 ### DS1307
 
@@ -104,7 +127,7 @@ Abrir = D9 en alto y D10 en bajo; cerrar = D9 en bajo y D10 en alto; detenido = 
 | 4 | GND | GND |
 | 5 | SDA | Nano A4 |
 | 6 | SCL | Nano A5 |
-| 7 | SQW | Sin conectar |
+| 7 | SQW (`SOUT`) | Sin conectar (no a +5 V directo: es salida de colector abierto y puede dar contención; si se usa, pull-up de 10 kΩ) |
 | 8 | VCC | +5 V |
 
 ### PCF8574A
@@ -185,9 +208,9 @@ CLAUDE.md, MEMORY.md      Contexto técnico del proyecto
 | `ON/C` | Borrar / volver |
 | `ok` | Aceptar |
 
-En la pantalla de estado: `1` abre la cortina, `2` la cierra, `0` detiene el motor, `F1` ajusta la hora, `3` ajusta la fecha y `F2` cambia la velocidad del reloj.
+En la pantalla de estado: `1` abre la cortina, `2` la cierra, `0` detiene el motor, `F1` ajusta la hora y `F2` cambia la velocidad del reloj.
 
-Los horarios se escriben en formato `HHMM` de 24 horas y la fecha como `DDMMAA`.
+Los horarios y la hora se escriben en formato `HHMM` de 24 horas.
 
 ## Documentación
 

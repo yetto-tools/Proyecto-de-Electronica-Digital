@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1520 1000" width="1520" height="1000" font-family="Segoe UI, Arial, sans-serif">
 <rect width="1520" height="1000" fill="#ffffff"/>
 <text x="40" y="42" font-size="24" text-anchor="start" font-weight="bold" fill="#222">Sistema para Casa — Diagrama pictórico de conexión (Proteus 8.13)</text>
-<text x="40" y="66" font-size="13" text-anchor="start" font-weight="normal" fill="#555">Arduino Nano v3 · RTC DS1307 · LCD 20x4 por I2C (PCF8574A) · Teclado 4x4 · LDR · Riego · Luces · Motor de cortina (L293D)</text>
+<text x="40" y="66" font-size="13" text-anchor="start" font-weight="normal" fill="#555">Arduino Nano v3 · RTC DS1307 · LCD 20x4 por I2C (PCF8574A) · Teclado 4x4 · LDR · Riego · Luces · Motor de cortina (L293D) · Display 7 seg</text>
 <rect x="560" y="120" width="280" height="850" rx="14" fill="#1b7a96" stroke="#0d3c4d" stroke-width="3"/>
 <text x="700" y="545" font-size="22" text-anchor="middle" font-weight="bold" fill="#fff">ARDUINO NANO v3</text>
 <text x="700" y="572" font-size="12" text-anchor="middle" font-weight="normal" fill="#d8f0f7">ATmega328P</text>
@@ -218,7 +218,7 @@
 <polyline points="1410,560 1410,720" fill="none" stroke="#b0b5bb" stroke-width="3" stroke-linejoin="round"/>
 <rect x="1240" y="720" width="190" height="170" rx="6" fill="#2e6b4a" stroke="#1b3d2a" stroke-width="2"/>
 <rect x="1285" y="745" width="130" height="70" rx="3" fill="#b7d36b" stroke="#222" stroke-width="1.5"/>
-<text x="1290" y="760" font-size="9" text-anchor="start" font-weight="normal" fill="#1b3d00">04/10/26    12:34:56</text>
+<text x="1290" y="760" font-size="9" text-anchor="start" font-weight="normal" fill="#1b3d00">CASA x60   12:34:56</text>
 <text x="1290" y="776" font-size="9" text-anchor="start" font-weight="normal" fill="#1b3d00">Luz: 45% Luces:ON  A</text>
 <text x="1290" y="792" font-size="9" text-anchor="start" font-weight="normal" fill="#1b3d00">Cortina:ABIERTA</text>
 <text x="1290" y="808" font-size="9" text-anchor="start" font-weight="normal" fill="#1b3d00">Riego:OFF Prox 18:00</text>
@@ -291,9 +291,9 @@
 <text x="225" y="812" font-size="22" text-anchor="middle" font-weight="bold" fill="#222">M</text>
 <text x="150" y="800" font-size="11" text-anchor="end" font-weight="bold" fill="#222">Motor DC</text>
 <text x="150" y="815" font-size="10" text-anchor="end" font-weight="normal" fill="#555">cortina</text>
-<text x="385" y="806" font-size="9" text-anchor="middle" font-weight="normal" fill="#e8e8e8">EN1, VCC1, VCC2 → +5V</text>
+<text x="385" y="806" font-size="9" text-anchor="middle" font-weight="normal" fill="#e8e8e8">EN1, VSS → +5V · VS → +12V</text>
 <text x="385" y="820" font-size="9" text-anchor="middle" font-weight="normal" fill="#e8e8e8">GND (pines 4, 5, 12, 13)</text>
-<text x="385" y="878" font-size="9" text-anchor="middle" font-weight="normal" fill="#bbb">Motor grande: alimentarlo aparte</text>
+<text x="385" y="878" font-size="9" text-anchor="middle" font-weight="normal" fill="#bbb">VS (motor): fuente aparte, GND común</text>
 <text x="60" y="925" font-size="12" text-anchor="start" font-weight="bold" fill="#222">TX →</text>
 <rect x="100" y="900" width="230" height="42" rx="5" fill="#111827" stroke="#000" stroke-width="2"/>
 <text x="215" y="925" font-size="11" text-anchor="middle" font-weight="normal" fill="#4cff4c">Virtual Terminal · RXD · 9600 baud</text>
@@ -301,4 +301,27 @@
 <rect x="880" y="930" width="600" height="56" rx="6" fill="#f5f6f8" stroke="#ccc" stroke-width="1.2"/>
 <text x="895" y="951" font-size="11" text-anchor="start" font-weight="normal" fill="#444">Todos los puntos «+5V» se unen al pin 5V del Arduino y todos los «GND» al pin GND (masa común).</text>
 <text x="895" y="970" font-size="11" text-anchor="start" font-weight="normal" fill="#444">Bus I2C: DS1307 (0x68) y PCF8574A (0x38) comparten SDA/SCL con un solo par de pull-ups de 4.7 kΩ.</text>
+<rect x="60" y="415" width="270" height="140" rx="8" fill="#e5e7eb" stroke="#9ca3af" stroke-width="1.5"/>
+<text x="72" y="436" font-size="12" text-anchor="start" font-weight="bold" fill="#222">Display 7 seg · tiempo de riego</text>
+<rect x="72" y="446" width="112" height="38" rx="4" fill="#111" stroke="#000" stroke-width="2"/>
+<text x="128" y="476" font-size="24" text-anchor="middle" font-weight="bold" font-family="Consolas, monospace" fill="#ff3b3b">00:00</text>
+<text x="72" y="502" font-size="9" text-anchor="start" font-weight="normal" fill="#444">4 × 74HC595 + 4 × 7SEG</text>
+<text x="72" y="516" font-size="9" text-anchor="start" font-weight="normal" fill="#444">MM:SS = tiempo que lleva regando</text>
+<text x="72" y="530" font-size="9" text-anchor="start" font-weight="normal" fill="#444">SRCLK y RCLK a los cuatro 595; QH' de cada uno</text>
+<text x="72" y="542" font-size="9" text-anchor="start" font-weight="normal" fill="#444">al SER del siguiente; OE a GND, SRCLR a +5V</text>
+<text x="322" y="444" font-size="10" text-anchor="end" font-weight="bold" fill="#222">DATO (SER)</text>
+<polyline points="330,440 560,440" fill="none" stroke="#d946ef" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="330" cy="440" r="4" fill="#d946ef"/>
+<circle cx="560" cy="440" r="4" fill="#d946ef"/>
+<text x="572" y="444" font-size="12" text-anchor="start" font-weight="bold" fill="#fff">D3</text>
+<text x="322" y="474" font-size="10" text-anchor="end" font-weight="bold" fill="#222">RELOJ (SRCLK)</text>
+<polyline points="330,470 560,470" fill="none" stroke="#14b8a6" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="330" cy="470" r="4" fill="#14b8a6"/>
+<circle cx="560" cy="470" r="4" fill="#14b8a6"/>
+<text x="572" y="474" font-size="12" text-anchor="start" font-weight="bold" fill="#fff">A3</text>
+<text x="322" y="504" font-size="10" text-anchor="end" font-weight="bold" fill="#222">LATCH (RCLK)</text>
+<polyline points="330,500 560,500" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="330" cy="500" r="4" fill="#f59e0b"/>
+<circle cx="560" cy="500" r="4" fill="#f59e0b"/>
+<text x="572" y="504" font-size="12" text-anchor="start" font-weight="bold" fill="#fff">D13</text>
 </svg>

@@ -26,11 +26,13 @@ Librerías necesarias en `C:\Users\Erick\Documents\Arduino\libraries\`:
 | Reloj | `DS1307` | SDA→A4, SCL→A5, cristal `CRYSTAL` 32.768 kHz en X1/X2, VBAT a pila 3 V (o 3 V fijo) |
 | Expansor del LCD | `PCF8574A` | SDA→A4, SCL→A5, **A0, A1, A2 a GND → dirección 0x38**; salidas al LCD según la tabla de abajo |
 | Pantalla | `LM044L` (20x4) | Ver tabla PCF8574A → LM044L |
+| Pantalla 2 (hora del DS1307) | `JHD-2X16-I2C` (módulo 16x2 con expansor integrado) | Solo 4 pines: VDD→+5 V, VSS→GND, SCL→A5, SDA→A4 (mismo bus que el resto). Dirección **0x3E** (`$7C` en el I2C Debugger); si usa otra, el sketch la busca solo (0x20–0x27 o 0x38–0x3F). Usa un protocolo de comandos propio (no el del PCF8574): el sketch lo maneja con `LCD2_JHD 1`. Verificado: muestra la hora del DS1307 |
 | Teclado | Teclado 4x4 con `0`–`9`, `F0`–`F3`, `ON/C`, `ok` | filas→D2, D4, D5, D6 · columnas→D11, D12, A2, A1 |
 | Luz ambiente | `LDR` + resistencia 10 kΩ | +5 V → LDR → A0 → 10 kΩ → GND (más luz = más voltaje) |
 | Bomba de riego | `MOTOR` + transistor/`RELAY`, o `LED-BLUE` con 330 Ω | D7 |
 | Luces | `LED-YELLOW` + 330 Ω | D8 |
-| Motor de cortina | `L293D` + `MOTOR` DC | IN1→D9 (abrir), IN2→D10 (cerrar), EN1, VCC1 y VCC2 a +5 V, motor entre OUT1 y OUT2, GND a masa |
+| Motor de cortina | `L293D` + `MOTOR` DC | IN1→D9 (abrir), IN2→D10 (cerrar), EN1 y VCC1 (`VSS`) a +5 V, VCC2 (`VS`) a +12 V (o +5 V según el motor), motor entre OUT1 y OUT2, GND a masa |
+| Tiempo de riego (MM:SS) | 4 × `7SEG-COM-CATHODE` + 4 × `74HC595` en cadena | D3 → SER del 1.º; A3 → SRCLK de los cuatro; D13 → RCLK de los cuatro; QH' de cada 595 → SER del siguiente; OE a GND, SRCLR a +5 V; QA–QG → segmentos a–g, QH → punto; cátodo común a GND |
 | Salida de texto | `VIRTUAL TERMINAL` | RXD del terminal → TX (D1), 9600 baud |
 | Diagnóstico I2C (opcional) | `I2C DEBUGGER` (Instruments) | **SDA→A4, SCL→A5** |
 
@@ -58,6 +60,9 @@ Pines del Nano según el conector de 30 pines (`TX1`=1 … `D2`=5 … `A0`=19 �
 | D12 | 15 | Columna 2 teclado | KEYPAD `COL2` |
 | A2 | 21 | Columna 3 teclado | KEYPAD `COL3` |
 | A1 | 20 | Columna 4 teclado | KEYPAD `COL4` |
+| D3 | 6 | Display 7 seg: dato | 74HC595 #1, pin 14 (`SER`) |
+| A3 | 22 | Display 7 seg: reloj | `SRCLK` (pin 11) de los cuatro 74HC595 |
+| D13 | 16 | Display 7 seg: latch | `RCLK` (pin 12) de los cuatro 74HC595 |
 | A0 | 19 | Luz ambiente | Unión LDR – resistencia de 10 kΩ |
 | A4 | 23 | SDA (I2C) | DS1307 pin 5, PCF8574A pin 15, pull-up 4.7 kΩ a +5 V |
 | A5 | 24 | SCL (I2C) | DS1307 pin 6, PCF8574A pin 14, pull-up 4.7 kΩ a +5 V |
@@ -65,7 +70,24 @@ Pines del Nano según el conector de 30 pines (`TX1`=1 … `D2`=5 … `A0`=19 �
 | 5V | 27 | Alimentación | Todos los puntos +5 V |
 | GND | 29 | Masa | Todos los puntos GND |
 
-Los pines D0, D3, D13, A3, A6 y A7 quedan libres.
+Los pines D0 (RX serie), A6 y A7 quedan libres. El LED `LED & Reset` del Nano de Proteus está en D13, así que parpadeará con los pulsos del latch del display: es normal.
+
+### Display de 7 segmentos (tiempo de riego)
+
+Cuatro dígitos `7SEG-COM-CATHODE`, cada uno con su `74HC595`, en cadena y sin multiplexar. Orden: Nano `D3` → 595 #1 (decenas de minuto) → #2 → #3 → #4 (unidades de segundo).
+
+| Pin 74HC595 | Nombre | Se conecta a |
+|---|---|---|
+| 14 | SER | #1: Nano D3 · #2, #3, #4: `QH'` (pin 9) del 595 anterior |
+| 11 | SRCLK | Nano A3 (los cuatro) |
+| 12 | RCLK | Nano D13 (los cuatro) |
+| 13 | OE | GND |
+| 10 | SRCLR | +5 V |
+| 16 / 8 | VCC / GND | +5 V / GND |
+| 15, 1, 2, 3, 4, 5, 6 | QA … QG | Segmentos a, b, c, d, e, f, g |
+| 7 | QH | Punto decimal (en el 2.º dígito hace de dos puntos) |
+
+Cátodo común (`COM`) de cada dígito a GND. Si el display no muestra el número correcto, revisar que QA…QG estén en el orden a…g. Durante el arranque muestra `88:88` (prueba de segmentos); al entrar al bucle principal pasa a `00:00`.
 
 ### Luz ambiente (LDR)
 
@@ -85,11 +107,13 @@ Los pines D0, D3, D13, A3, A6 y A7 quedan libres.
 | 4, 5 | GND | GND |
 | 6 | 2Y | Motor, terminal 2 |
 | 7 | 2A | Nano D10 |
-| 8 | VCC2 | +5 V (alimentación del motor) |
-| 16 | VCC1 | +5 V |
+| 8 | VCC2 (`VS` en Proteus) | **+12 V** (alimentación del motor; el `MOTOR` de Proteus es de 12 V. Con un motor de 5 V, usar +5 V) |
+| 16 | VCC1 (`VSS` en Proteus) | **+5 V** (lógica; no conectarlo a GND) |
 | 9–15 | EN2, 3A, 3Y, 12-13 GND, 4Y, 4A | Sin conectar (pines 12 y 13 a GND) |
 
-Abrir = D9 en alto y D10 en bajo; cerrar = D9 en bajo y D10 en alto; detenido = ambos en bajo.
+Abrir = D9 en alto y D10 en bajo; cerrar = D9 en bajo y D10 en alto; detenido = ambos en bajo. **EN1 (pin 1) debe estar a +5 V**: sin eso el canal no se habilita y el motor no gira. La masa de la fuente de 12 V se une a la del Arduino.
+
+**Segundo motor (opcional):** el sketch solo maneja el canal 1 (OUT1/OUT2). Si se dibuja un segundo motor en OUT3 (pin 11) y OUT4 (pin 14), para que gire junto con el primero: IN3 (pin 10) a D9, IN4 (pin 15) a D10 y EN2 (pin 9) a +5 V.
 
 ### DS1307
 
@@ -101,7 +125,7 @@ Abrir = D9 en alto y D10 en bajo; cerrar = D9 en bajo y D10 en alto; detenido = 
 | 4 | GND | GND |
 | 5 | SDA | Nano A4 |
 | 6 | SCL | Nano A5 |
-| 7 | SQW | Sin conectar |
+| 7 | SQW (`SOUT`) | Sin conectar (no a +5 V directo: es salida de colector abierto y puede dar contención; si se usa, pull-up de 10 kΩ) |
 | 8 | VCC | +5 V |
 
 ### PCF8574A
@@ -183,12 +207,12 @@ Disposición del teclado: `1 2 3 F0 / 4 5 6 F1 / 7 8 9 F2 / ON/C 0 OK F3`. Si se
 | `ON/C` | borrar un dígito / volver atrás |
 | `ok` | aceptar |
 
-En la pantalla de estado: `1` abre la cortina, `2` la cierra, `0` detiene el motor y `3` ajusta la fecha.
+En la pantalla de estado: `1` abre la cortina, `2` la cierra, `0` detiene el motor, `F1` ajusta la hora y `F2` cambia la velocidad del reloj.
 
 ### Programar
 
 1. En la pantalla de estado pulsar `F0`.
-2. Elegir con `F1`/`F2` y `OK`, o pulsar el número: 1 Riego mañana, 2 Riego tarde, 3 Cortinas, 4 Umbral de luz, 5 Ajustar hora, 6 Ajustar fecha, 7 Velocidad reloj.
+2. Elegir con `F1`/`F2` y `OK`, o pulsar el número: 1 Riego mañana, 2 Riego tarde, 3 Cortinas, 4 Umbral de luz, 5 Ajustar hora, 6 Velocidad reloj.
 3. Horarios: escribir `HHMM` (24 h) de inicio y `OK`; luego el fin y `OK`. Para cortinas, inicio = abrir y fin = cerrar.
 4. Umbral de luz: porcentaje por debajo del cual se encienden las luces y porcentaje por encima del cual se apagan (apagar > encender).
 5. Todo se guarda en EEPROM. Inicio = fin deshabilita la ventana.
@@ -198,8 +222,7 @@ En la pantalla de estado: `1` abre la cortina, `2` la cierra, `0` detiene el mot
 Al arrancar, el reloj se fija a las 05:55 y corre a **x60** (1 s real = 1 min simulado). Desde el teclado se puede cambiar sin recompilar:
 
 - `F1` (en la pantalla de estado): ajustar la hora (`HHMM` + `OK`; la pantalla muestra la hora actual con segundos).
-- `3` (en la pantalla de estado): ajustar la fecha (`DDMMAA` + `OK`, p. ej. `041026` = 04/10/2026). La fecha avanza sola, también con el reloj acelerado, y respeta meses y años bisiestos.
-- `F2` (en la pantalla de estado): velocidad del reloj, `1`=x1, `2`=x10, `3`=x60, `4`=x300. También están en el menú (opciones 5, 6 y 7).
+- `F2` (en la pantalla de estado): velocidad del reloj, `1`=x1, `2`=x10, `3`=x60, `4`=x300. También están en el menú (opciones 5 y 6). El reloj es un contador de 24 h: al llegar a 23:59:59 vuelve a 00:00:00 y los eventos se repiten cada día a su hora; no hay fecha.
 
 Con los valores por defecto y x60:
 
@@ -226,6 +249,27 @@ El sketch ya está pensado para simular rápido: el reloj corre en software con 
 5. Quitar temporalmente el motor y el L293D para comprobar si el análisis analógico es el cuello de botella.
 
 ## Solución de problemas
+
+### El motor de la cortina no gira
+
+1. Con *Highlight net*, comprobar que **EN1 (pin 1)** y **VSS (pin 16)** estén a +5 V (VSS a GND deja al chip sin alimentación lógica) y **VS (pin 8)** a la tensión del motor (+12 V para el `MOTOR` de Proteus).
+2. Comprobar que la masa de la fuente del motor y la del Arduino sean la misma.
+3. Ver en el Virtual Terminal que aparezca `[EVENTO] Cortina ABRIENDO`/`CERRANDO` (o pulsar `1`/`2` en la pantalla de estado). El giro dura 4 s.
+4. Un segundo motor en OUT3/OUT4 no se mueve si IN3, IN4 y EN2 quedan sin conectar.
+
+### Saber qué está haciendo el sketch (depuración)
+
+Con `#define DEPURAR 1` (al inicio del sketch):
+
+- **Por serie** salen mensajes `[DBG] setup: ...` en cada etapa del arranque (LCD, RTC y LDR, Timer1) y, ya en marcha, una línea por segundo real: `[DBG] HH:MM:SS xNN pant=N`. La última línea que aparece indica hasta dónde llegó.
+- **Causa del último reinicio:** la primera línea dice `reinicio por: ...` con `ENCENDIDO` (arranque normal), `PIN-RESET` (se activó el pin RESET: revisar el esquema), `BROWN-OUT` (la tensión del chip bajó del umbral), `WATCHDOG` o `SALTO-A-0` (el programa se salió de control). Si el arranque se repite solo, esa línea dice por qué.
+- **Display de 7 segmentos:** muestra `88:88` durante el arranque, pasa a `00:00` al entrar al bucle y **los dos puntos parpadean cada segundo real**. Si parpadean, el sketch corre aunque el terminal no muestre nada.
+
+Para la entrega, poner `DEPURAR 0`.
+
+### El Virtual Terminal no muestra texto
+
+`RXD` del terminal va a **D1/TX** del Arduino (TXD del terminal puede ir a D0 o quedar libre); 9600 baud, 8 bits, sin paridad, 1 stop. Reabrirlo con **Debug → Virtual Terminal**. El sketch imprime una línea por minuto simulado (subir la velocidad con `F2`).
 
 ### El LCD se ve iluminado pero sin texto
 

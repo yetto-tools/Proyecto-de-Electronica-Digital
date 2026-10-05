@@ -37,7 +37,9 @@ La simulación objetivo es **Proteus 8.13**; todo componente debe existir allí 
 
 | Pin | Función | Pin | Función |
 |---|---|---|---|
-| D1 | TX serie (9600) | D9 | L293D IN1 (abrir) |
+| D1 | TX serie (9600) | D3 | Display 7 seg: dato (SER) |
+| A3 | Display 7 seg: reloj (SRCLK) | D13 | Display 7 seg: latch (RCLK) |
+| D9 | L293D IN1 (abrir) | | |
 | D2 | Teclado fila 1 | D10 | L293D IN2 (cerrar) |
 | D4 | Teclado fila 2 | D11 | Teclado columna 1 |
 | D5 | Teclado fila 3 | D12 | Teclado columna 2 |
@@ -46,7 +48,7 @@ La simulación objetivo es **Proteus 8.13**; todo componente debe existir allí 
 | D8 | Luces | A2 | Teclado columna 3 |
 | A4 | SDA (I2C) | A5 | SCL (I2C) |
 
-Libres: D0, D3, D13, A3, A6, A7. La columna 3 del teclado va en A2 porque D13 comparte pin con el LED interno del Nano.
+Libres: D0 (RX serie), A6, A7. La columna 3 del teclado va en A2 porque D13 comparte pin con el LED interno del Nano; D13 se usa ahora como latch del display de 7 segmentos, así que ese LED parpadea con sus pulsos (inofensivo).
 
 El cableado pin a pin de cada chip (Nano, DS1307, PCF8574A, LM044L, L293D, teclado) está en `README.md` y `PROTEUS.md`. El diagrama pictórico es `diagrama_conexion.png` / `.svg`.
 
@@ -57,7 +59,19 @@ El cableado pin a pin de cada chip (Nano, DS1307, PCF8574A, LM044L, L293D, tecla
 | DS1307 | `0x68` (fija) | En el I2C Debugger aparece como `0xD0` (dirección << 1) |
 | PCF8574A (LCD) | `0x38` con A0–A2 a GND | En el debugger: `0x70`. Con A0–A2 en alto sería `0x3F` |
 
-El sketch detecta la dirección del LCD al arrancar probando `0x38, 0x3F, 0x27, 0x20`. Se necesitan pull-ups de 4.7 kΩ a +5 V en SDA y SCL (una sola pareja para todo el bus).
+| Módulo LCD 16x2 `JHD-2X16-I2C` (hora del DS1307) | `0x3E` | En el debugger: `$7C`. Opcional: el sketch busca otra dirección si no responde 0x3E |
+
+El sketch detecta la dirección del LCD principal al arrancar probando `0x38, 0x3F, 0x27, 0x20`. Se necesitan pull-ups de 4.7 kΩ a +5 V en SDA y SCL (una sola pareja para todo el bus).
+
+### 2.2.0 Pantalla 16x2: hora tal como la lee el DS1307
+
+Segundo LCD: módulo `JHD-2X16-I2C` de Proteus (16x2 con expansor integrado, 4 pines: VDD→+5 V, VSS→GND, SCL→A5, SDA→A4) en el mismo bus I2C (`LcdI2C(0x3E, 16, 2)`). Con `LCD2_JHD 1` (por defecto) el sketch lo maneja con un controlador propio de comandos (`jhdComando`, `jhdTexto`, `jhdInicio`): cada transmisión lleva un byte de control (`0x80` = comando, `0x40` = datos); inicio `0x38, 0x38, 0x0C, 0x01, 0x06`; fila 1 en la posición DDRAM `0x40`. Con `LCD2_JHD 0` usa `LcdI2C` (protocolo del PCF8574, como la 20x4), para una 16x2 con expansor PCF8574 suelto. Verificado en Proteus: con este controlador la pantalla muestra la hora (con `LcdI2C` quedaba en blanco aunque el debugger mostrara `S 7C A`). Fila 1: `Hora del DS1307`. Fila 2: `HH:MM:SS` leída directamente del DS1307 (`mostrarRtc`, una lectura de 3 registros por segundo real). Es opcional: si no hay un segundo expansor, el sketch lo omite. Con el reloj acelerado (x10, x60, x300) el sketch escribe la hora simulada en el DS1307 cada segundo real, para que lo que muestra esta pantalla coincida con el sistema; a x1 no escribe y el DS1307 manda (se relee una vez por minuto). Esto añade 2 transferencias I2C cortas por segundo real.
+
+### 2.2.1 Display de 7 segmentos (tiempo de riego, MM:SS)
+
+Cuatro dígitos `7SEG-COM-CATHODE`, cada uno con su `74HC595`, en cadena y **sin multiplexar** (no hay que refrescarlos, así que no cuestan CPU en la simulación). Cadena: Nano D3 → 595 #1 (decenas de minuto) → #2 → #3 → #4 (unidades de segundo); SRCLK (pin 11) a A3 y RCLK (pin 12) a D13 en los cuatro; OE (13) a GND; SRCLR (10) a +5 V; `QH'` (9) de cada 595 al `SER` (14) del siguiente. Salidas QA…QG = segmentos a…g y QH = punto (el del 2.º dígito hace de dos puntos). El cátodo común de cada dígito a GND; en un circuito real, 330 Ω por segmento.
+
+Software: `mostrar7seg(segundos)` envía 4 bytes con `shiftOut` (tabla `SEG7`) y activa el latch. `riegoSeg` cuenta los segundos simulados que lleva regando (`n × velocidad` cada segundo real, tope 99:59); se pone en 0 cuando empieza un riego (`setBomba`) y conserva el valor al terminar. Con `DEPURAR 1` los dos puntos parpadean cada segundo real; durante el arranque se muestra `88:88` (`prueba7seg`).
 
 ### 2.3 LCD por I2C
 
@@ -68,7 +82,7 @@ LM044L (20×4, HD44780) con expansor PCF8574A en modo 4 bits. Mapeo del expansor
 Ningún pin del Arduino debe alimentar directamente una carga (máximo ~20 mA por pin).
 
 - **Bomba:** transistor NPN (2N2222/TIP120) con 1 kΩ en la base, diodo 1N4007 en antiparalelo con la bomba y masa común con el Arduino; o módulo de relé. En Proteus basta un LED con 330 Ω.
-- **Motor de cortina:** puente H **L293D**. EN1 (pin 1) y ambos VCC a +5 V. D9 alto y D10 bajo = abrir; D9 bajo y D10 alto = cerrar; ambos bajo = parado. En un circuito real, alimentar VCC2 con una fuente aparte, con masa común.
+- **Motor de cortina:** puente H **L293D**. EN1 (pin 1) y VCC1 (`VSS`, pin 16) a +5 V; VCC2 (`VS`, pin 8) a la tensión del motor (**+12 V** en la simulación, porque el `MOTOR` de Proteus es de 12 V). Si EN1 queda sin conectar o VSS a GND, el motor no gira. D9 alto y D10 bajo = abrir; D9 bajo y D10 alto = cerrar; ambos bajo = parado. En un circuito real, alimentar VCC2 con una fuente aparte, con masa común. Un segundo motor en OUT3/OUT4 solo se mueve si se unen IN3 a D9, IN4 a D10 y EN2 a +5 V.
 - **LDR:** divisor de voltaje `+5 V – LDR – A0 – 10 kΩ – GND`. Más luz → más voltaje → porcentaje mayor.
 
 ## 3. Arquitectura de software
@@ -90,7 +104,7 @@ Uso de memoria (compilación actual): flash 53 % (16 348 de 30 720 bytes), RAM 5
 
 ### 3.2 Reloj, eventos y acciones
 
-- **Reloj en software + DS1307.** La hora y la fecha viven en la variable global `ahoraG` (`struct Hora`) y avanzan con el Timer1 (ver §3.3). El **DS1307** es el respaldo persistente: se lee al arrancar (7 registros: segundos, minutos, horas, día de la semana, día, mes, año) y se escribe al editar la hora o la fecha. El bit CH (bit 7 del registro 0) en 1 indica reloj detenido.
+- **Reloj en software + DS1307.** El sistema trabaja solo con la **hora del día** (contador de 24 h, sin fecha, días ni años): vive en la variable global `ahoraG` (`struct Hora`: h, m, s) y avanza con el Timer1 (ver §3.3). El **DS1307** es el respaldo persistente: se lee al arrancar (3 registros: segundos, minutos, horas) y se escribe al editar la hora. El bit CH (bit 7 del registro 0) en 1 indica reloj detenido.
 - Las ventanas horarias se evalúan con `enVentana(idx)`, en minutos del día. Una ventana es `[inicio, fin)`; si `fin < inicio` cruza la medianoche; si `inicio == fin` está deshabilitada.
 - **Riego:** `setBomba(enVentana(AM) || enVentana(PM))`.
 - **Cortina:** `controlCortina` solo actúa **cuando cambia** el estado de la ventana (`cortinaVentPrev`), de modo que una orden manual se respeta hasta el siguiente evento programado. `moverCortina` activa el pin correspondiente y fija `cortinaFin = millis() + CORTINA_MS` (4 s); `actualizarCortina` detiene el motor al vencer.
@@ -101,7 +115,7 @@ Uso de memoria (compilación actual): flash 53 % (16 348 de 30 720 bytes), RAM 5
 
 El **Timer1** del ATmega328P está en modo CTC con prescaler 64 y `OCR1A = 2499`: genera una interrupción a 100 Hz (16 MHz / 64 / 2500). Su ISR (`TIMER1_COMPA_vect`) levanta el flag `tick10ms` y, cada 100 ticks, suma un segundo a `segPend`. El Timer0 no se toca, porque lo usan `millis()`, `delay()` y la librería `Keypad`. Los pines 9 y 10 (PWM del Timer1) se usan solo con `digitalWrite`, así que no hay conflicto.
 
-El `loop()` consume `segPend` y llama a `relojAvanzar(n × velocidad)`, que suma los segundos a `ahoraG` y avanza la fecha (meses y años bisiestos) al cruzar la medianoche. Velocidades: x1, x10, x60 (valor inicial) y x300, en `VELOCIDADES`.
+El `loop()` consume `segPend` y llama a `relojAvanzar(n × velocidad)`, que suma los segundos a `ahoraG` módulo 86 400 (vuelve a 00:00:00 al pasar de 23:59:59). Velocidades: x1, x10, x60 (valor inicial) y x300, en `VELOCIDADES`.
 
 **Sincronización con el DS1307**, una vez por minuto real (`segSync`):
 - a **x1**, se lee el DS1307 y manda él (corrige la deriva del reloj en software);
@@ -122,18 +136,17 @@ Se guarda con `EEPROM.put(0, cfg)` desde la dirección 0. Al arrancar, si `magic
 
 Valores por defecto: riego 06:00–06:30 y 18:00–18:30; cortina abre 07:00, cierra 19:00; luces encienden < 30 %, apagan > 45 %.
 
-La hora, la fecha y la velocidad **no** se guardan en la EEPROM: la hora y la fecha viven en el DS1307.
+La hora y la velocidad **no** se guardan en la EEPROM: la hora vive en el DS1307.
 
 ### 3.5 Interfaz (máquina de estados)
 
 | Pantalla | Función |
 |---|---|
-| `P_INICIO` | Estado (fecha, hora, luz, cortina, riego) |
-| `P_MENU` | Lista de 7 opciones con desplazamiento |
+| `P_INICIO` | Estado (velocidad, hora, luz, cortina, riego) |
+| `P_MENU` | Lista de 6 opciones con desplazamiento |
 | `P_VENTANA` | Edita inicio/fin de riego o cortina (2 etapas) |
 | `P_UMBRAL` | Edita umbrales de luz (2 etapas) |
 | `P_HORA` | Edita la hora (`HHMM`) |
-| `P_FECHA` | Edita la fecha (`DDMMAA`) |
 | `P_VELOC` | Elige la velocidad del reloj |
 | `P_MSG` | Mensaje temporal (1.3 s) y luego pasa a otra pantalla |
 
@@ -145,7 +158,7 @@ Matriz 4×4 con la librería `Keypad` (pull-ups internos, sin resistencias exter
 
 ### 3.7 Salida serie
 
-9600 baud por D1 al Virtual Terminal. Una línea por minuto simulado: `DD/MM/AA HH:MM:SS | Luz NN% | Riego:.. Luces:.. Cortina:..`, más los eventos y los cambios de programación.
+9600 baud por D1 al Virtual Terminal. Una línea por minuto simulado: `HH:MM:SS | Luz NN% | Riego:.. Luces:.. Cortina:..`, más los eventos y los cambios de programación.
 
 ## 4. Restricciones de compilación (VSM Studio de Proteus, Arduino IDE 1.8.5)
 
@@ -187,15 +200,16 @@ Las luces se prueban moviendo el nivel de luz del LDR (o un potenciómetro de su
 | Constante | Valor | Efecto |
 |---|---|---|
 | `velocidad` | 60 | Velocidad inicial del reloj |
-| `FIJAR_HORA_AL_ARRANCAR` | 1 | 1 = fija fecha y hora al arrancar (demo repetible); 0 = respeta el DS1307 |
+| `FIJAR_HORA_AL_ARRANCAR` | 1 | 1 = fija la hora al arrancar (demo repetible); 0 = respeta el DS1307 |
 | `HORA_ARRANQUE`, `MIN_ARRANQUE` | 05:55 | Hora fijada al arrancar |
-| `DIA/MES/ANIO_ARRANQUE` | 01/01/26 | Fecha fijada al arrancar |
+| `LCD2_JHD` | 1 | 1 = pantalla 16x2 módulo JHD-2X16-I2C (protocolo de comandos); 0 = 16x2 con PCF8574 (`LcdI2C`) |
+| `DEPURAR` | 1 | 1 = mensajes `[DBG]` por serie (incluida la causa del último reinicio) y dos puntos del display parpadeando; poner 0 para la entrega |
 | `CORTINA_MS` | 4000 | Duración del giro del motor |
 | `PERIODO_MS` | 500 | Periodo del ciclo de control |
 | `CONFIG_DEFECTO` | ver §3.4 | Horarios y umbrales de fábrica |
 | `CONFIG_MAGIC` | 0xA7 | Subir al cambiar `Config` o sus defaults |
 
-**Para operación real:** poner `FIJAR_HORA_AL_ARRANCAR 0`, `velocidad = 1`, programar la hora y la fecha desde el teclado y alimentar el DS1307 con su pila de respaldo.
+**Para operación real:** poner `FIJAR_HORA_AL_ARRANCAR 0`, `velocidad = 1`, programar la hora desde el teclado y alimentar el DS1307 con su pila de respaldo.
 
 ## 8. Solución de problemas
 
@@ -210,9 +224,13 @@ Las luces se prueban moviendo el nivel de luz del LDR (o un potenciómetro de su
 | `multiple definition of LcdI2C::...` | Librería agregada al proyecto de VSM Studio | Dejar solo `main.ino` |
 | `unknown type name 'class'` | Archivo `.c` con clases | Renombrar a `.cpp` |
 | `'POSITIVE' was not declared` | Librería `LiquidCrystal I2C` equivocada | Usar `LcdI2C` |
+| Motor no gira | EN1 sin conectar, VSS (pin 16) a GND, o VS (pin 8) sin tensión | EN1 y VSS a +5 V, VS a +12 V; masa común (ver `PROTEUS.md`) |
+| Segundo motor quieto | IN3, IN4 y EN2 sin conectar | IN3→D9, IN4→D10, EN2→+5 V |
+| Aviso de contención en el DS1307 | SQW/`SOUT` (pin 7) a +5 V directo | Dejarlo sin conectar o con pull-up de 10 kΩ |
 | Motor gira al revés | Terminales del motor o D9/D10 intercambiados | Invertir los cables del motor |
 | Bomba actúa al revés | Módulo de relé activo en bajo | Cambiar la lógica en `setBomba` |
-| Reinicios o bloqueos | LED con resistencia entre RESET y GND | Quitarlo (ver §9) |
+| Reinicios o bloqueos | Pin RESET a nivel bajo (LED entre RESET y GND), brown-out o fallo del programa | Leer la línea `[DBG] ... reinicio por:` del terminal: `PIN-RESET` → revisar el esquema (ver §9); `BROWN-OUT` → alimentación; `SALTO-A-0` → fallo del programa |
+| Display de 7 seg en blanco o con segmentos erróneos | Cadena de 595 mal unida u orden QA–QG equivocado | Revisar SRCLK/RCLK comunes, `QH'` → `SER`, OE a GND y QA…QG = a…g |
 | Simulación lenta | Ver §6 | — |
 
 Aviso inofensivo: `Compiler optimizations disabled; functions from <util/delay.h> won't work as designed` (VSM Studio compila en Debug). `delay()` de Arduino funciona igual.
@@ -223,9 +241,9 @@ Aviso inofensivo: `Compiler optimizations disabled; functions from <util/delay.h
 - Quitar D2/R5 de RESET en el esquema (deja el pin en ~2 V).
 - Agregar pull-ups de 4.7 kΩ en SDA/SCL al esquema (hacen falta en el circuito real).
 - La hora se acelera por software (lectura-modificación-escritura); no sirve para precisión en operación real.
-- Solo hay dos ventanas de riego y una de cortina; la hora y la fecha no se guardan en EEPROM (las mantiene el DS1307).
+- Solo hay dos ventanas de riego y una de cortina; la hora no se guarda en EEPROM (la mantiene el DS1307) y no hay fecha: los eventos se repiten todos los días a su hora.
 - Comprobar en Proteus que el teclado responde bien con el barrido a 100 Hz y medir la mejora de velocidad; si hace falta, probar `Wire.setClock(400000)`.
-- Con `FIJAR_HORA_AL_ARRANCAR 1`, cada arranque de la simulación fija 01/01/26 05:55 y pierde la fecha editada.
+- Con `FIJAR_HORA_AL_ARRANCAR 1`, cada arranque de la simulación fija las 05:55 y pierde la hora editada.
 
 ## 10. Estructura del repositorio
 

@@ -33,7 +33,7 @@ ON/C  0    OK   F3
 Es la pantalla que se ve normalmente:
 
 ```
-04/10/26    05:55:12
+CASA x60   05:55:12
 Luz: 62% Luces:OFF A
 Cortina:CERRADA
 Riego:OFF Prox 06:00
@@ -41,10 +41,23 @@ Riego:OFF Prox 06:00
 
 | Fila | Contenido |
 |---|---|
-| 1 | Fecha (`DD/MM/AA`) y hora (`HH:MM:SS`) |
+| 1 | Velocidad del reloj (`x60`) y hora del día (`HH:MM:SS`, formato de 24 h) |
 | 2 | Nivel de luz en %, estado de las luces (`ON`/`OFF`) y modo: `A` = automático, `M` = manual |
 | 3 | Estado de la cortina: `ABIERTA`, `CERRADA`, `ABRIENDO` o `CERRANDO` |
 | 4 | Riego `ON`/`OFF`. Si está apagado, muestra la hora del **próximo** riego (`Prox`); si está regando, la hora en que **termina** (`Fin`). |
+
+### Pantalla 16x2: hora del reloj DS1307
+
+Una segunda pantalla pequeña muestra la hora **tal como la entrega el reloj DS1307** (`HH:MM:SS`), que se actualiza cada segundo. Sirve para comprobar que el reloj funciona y que coincide con la hora de la pantalla principal. Si la hora se ajusta con `F1`, esta pantalla también cambia.
+
+### Display de 7 segmentos: tiempo de riego
+
+Además de la pantalla, un display de 4 dígitos muestra **cuánto tiempo lleva regando**, en formato `MM:SS`:
+
+- Cuando empieza el riego, el contador arranca en `00:00` y sube mientras la bomba está encendida.
+- Al terminar el riego, el display **conserva la duración** de ese riego hasta que empiece el siguiente.
+- El tiempo es el del reloj del sistema: con la velocidad en x60, un segundo real cuenta como un minuto.
+- Durante el arranque muestra `88:88` unos instantes (prueba de segmentos).
 
 ## 4. Teclas en la pantalla de estado
 
@@ -57,7 +70,6 @@ Riego:OFF Prox 06:00
 | `1` | Abrir la cortina |
 | `2` | Cerrar la cortina |
 | `0` | Detener el motor de la cortina |
-| `3` | Ajustar la fecha |
 
 **Luces:** en AUTO el sistema decide según la luz ambiente. En ON quedan encendidas y en OFF apagadas, sin importar la luz. La `M` en la pantalla indica que está en manual.
 
@@ -81,8 +93,7 @@ Se abre con `F0`. Muestra 4 opciones a la vez y se desplaza al bajar.
 | 3 Cortinas | Hora de abrir y hora de cerrar la cortina |
 | 4 Umbral de luz | Porcentajes de luz para encender y apagar las luces |
 | 5 Ajustar hora | Poner el reloj en hora |
-| 6 Ajustar fecha | Poner la fecha |
-| 7 Velocidad reloj | Acelerar el reloj para probar el sistema |
+| 6 Velocidad reloj | Acelerar el reloj para probar el sistema |
 
 **Moverse en el menú:**
 
@@ -90,7 +101,7 @@ Se abre con `F0`. Muestra 4 opciones a la vez y se desplaza al bajar.
 |---|---|
 | `F1` | Siguiente opción |
 | `F2` | Opción anterior |
-| `1` … `7` | Ir directamente a esa opción |
+| `1` … `6` | Ir directamente a esa opción |
 | `OK` | Entrar a la opción marcada con `>` |
 | `ON/C` o `F0` | Volver a la pantalla de estado |
 
@@ -133,17 +144,11 @@ De fábrica: se encienden por debajo de 30 % y se apagan por encima de 45 %. Ent
 2. La pantalla muestra la hora actual con segundos.
 3. Escribe la hora nueva como `HHMM` y pulsa `OK`. Los segundos empiezan en cero.
 
-### 6.4 Ajustar la fecha
+El sistema solo usa la **hora del día** (24 h): no hay fecha. El reloj cuenta hasta `23:59:59` y vuelve a `00:00:00`, y los eventos se repiten todos los días a su hora programada.
 
-1. Pulsa `3` en la pantalla de estado (o menú → opción 6).
-2. Escribe `DDMMAA` y pulsa `OK`. Por ejemplo, `041026` es 4 de octubre de 2026.
-3. Una fecha que no existe (como 31/02) se rechaza con "Fecha invalida".
+### 6.4 Velocidad del reloj (demostraciones)
 
-La fecha avanza sola cada día y respeta los meses y los años bisiestos.
-
-### 6.5 Velocidad del reloj (demostraciones)
-
-Pulsa `F2` (o menú → opción 7) y elige:
+Pulsa `F2` (o menú → opción 6) y elige:
 
 | Tecla | Velocidad | Significado |
 |---|---|---|
@@ -154,7 +159,7 @@ Pulsa `F2` (o menú → opción 7) y elige:
 
 Al arrancar, el sistema usa **x60**. Para uso normal elige **x1**.
 
-Los horarios de riego y cortina y los umbrales de luz **se guardan en memoria** y se conservan al apagar el sistema. La hora y la fecha las mantiene el reloj DS1307. La velocidad del reloj vuelve a x60 al reiniciar.
+Los horarios de riego y cortina y los umbrales de luz **se guardan en memoria** y se conservan al apagar el sistema. La hora la mantiene el reloj DS1307. La velocidad del reloj vuelve a x60 al reiniciar.
 
 ## 7. Mensajes de la pantalla
 
@@ -162,7 +167,6 @@ Los horarios de riego y cortina y los umbrales de luz **se guardan en memoria** 
 |---|---|---|
 | `Guardado` | La configuración se guardó | Nada |
 | `Hora invalida – Use HHMM (24h)` | La hora escrita no existe | Escribirla de nuevo |
-| `Fecha invalida – Use DDMMAA` | La fecha escrita no existe | Escribirla de nuevo |
 | `Valor invalido – 0 a 99` | Porcentaje fuera de rango | Escribirlo de nuevo |
 | `Apagar debe ser mayor que encender` | Los umbrales están al revés | Poner un valor de apagado más alto |
 | `ERROR: sin RTC – Revise I2C` | No se detecta el reloj | Revisar la conexión del reloj DS1307 |
@@ -171,7 +175,7 @@ Los horarios de riego y cortina y los umbrales de luz **se guardan en memoria** 
 
 **Las luces no cambian aunque cambie la luz.** Revisa si están en modo manual (`M` en la fila 2). Pulsa `F3` hasta que aparezca `A`.
 
-**El riego o la cortina no se activan a la hora esperada.** Comprueba la hora y la fecha del reloj (`F1` / `3`) y que el horario no tenga inicio igual a fin. Con la velocidad en x1 el cambio puede tardar horas; usa x60 para probar.
+**El riego o la cortina no se activan a la hora esperada.** Comprueba la hora del reloj (`F1`) y que el horario no tenga inicio igual a fin. Con la velocidad en x1 el cambio puede tardar horas; usa x60 para probar.
 
 **Al reiniciar vuelve a la hora de las 05:55.** Es el comportamiento de demostración. Un técnico puede desactivarlo (ver el manual técnico, sección 7).
 
