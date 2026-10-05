@@ -23,6 +23,8 @@ Todo corre en **un solo Arduino Nano v3**.
 | Entrada | Teclado matricial 4x4, LDR (luz) |
 | Salidas | Riego (D7), luces (D8), motor de cortina por L293D (D9 abrir, D10 cerrar), display de 7 segmentos con el tiempo de riego (D3, A3, D13) |
 
+![Diagrama de conexión](diagrama_conexion.png)
+
 El diagrama pictórico está en [`diagrama_conexion.png`](diagrama_conexion.png); la asignación de pines, el guion de demostración y la solución de problemas están en [`PROTEUS.md`](PROTEUS.md).
 
 ## Conexión pin a pin
@@ -177,7 +179,7 @@ build/
 PROTEUS.md                Simulación: componentes, conexiones, uso y problemas comunes
 MANUAL_USUARIO.md         Manual de usuario
 MANUAL_TECNICO.md         Manual técnico
-diagrama_conexion.svg/png Diagrama de conexión
+diagrama_conexion.png     Diagrama de conexión
 CLAUDE.md, MEMORY.md      Contexto técnico del proyecto
 ```
 
