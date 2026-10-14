@@ -54,9 +54,9 @@ Por el bus I2C (A4/A5) cuelgan tres dispositivos: el expansor del LCD 20x4 (`PCF
 
 Ya no quedan pines digitales libres en el Nano (D0/RX sigue reservado para programar). El buzzer y el sensor de intrusión de la alarma van por el expansor I2C de la sección 2, no por pines propios.
 
-Libres: D0 (RX serie), A6, A7. La columna 3 del teclado va en A2 porque D13 comparte pin con el LED interno del Nano; D13 se usa ahora como latch del display de 7 segmentos, así que ese LED parpadea con sus pulsos (inofensivo).
+Libres: D0 (RX serie), A7. A6 ya no está libre: lo ocupa el potenciómetro de humedad del suelo. La columna 3 del teclado va en A2 porque D13 comparte pin con el LED interno del Nano; D13 se usa ahora como latch del display de 7 segmentos, así que ese LED parpadea con sus pulsos (inofensivo).
 
-El cableado pin a pin de cada chip (Nano, DS1307, PCF8574A, LM044L, L293D, teclado) está en `README.md` y `PROTEUS.md`. El diagrama pictórico es `diagrama_conexion.png` / `.svg`.
+El cableado pin a pin de cada chip (Nano, PCF8574A del LCD, PCF8574/PCF8574A de la alarma, LM044L, L293D, teclado) está en `README.md` y `PROTEUS.md`. El diagrama pictórico es `diagrama_conexion.png`.
 
 ### 2.2 Bus I2C
 
@@ -255,7 +255,6 @@ Aviso inofensivo: `Compiler optimizations disabled; functions from <util/delay.h
 - Quitar D2/R5 de RESET en el esquema (deja el pin en ~2 V).
 - Agregar pull-ups de 4.7 kΩ en SDA/SCL al esquema (hacen falta en el circuito real).
 - No hay RTC: la hora se fija a 05:55 en cada arranque y no hay fecha, así que los eventos se repiten todos los días a su hora programada.
-- Actualizar el diagrama pictórico (`diagrama_conexion.svg`/`.png`) con el potenciómetro de humedad (A6) y el expansor de la alarma (buzzer + botón) — no se regeneró en este cambio.
 
 ## 10. Estructura del repositorio
 

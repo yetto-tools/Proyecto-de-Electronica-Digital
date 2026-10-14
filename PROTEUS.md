@@ -139,19 +139,6 @@ Abrir = D9 en alto y D10 en bajo; cerrar = D9 en bajo y D10 en alto; detenido = 
 
 **Segundo motor (opcional):** el sketch solo maneja el canal 1 (OUT1/OUT2). Si se dibuja un segundo motor en OUT3 (pin 11) y OUT4 (pin 14), para que gire junto con el primero: IN3 (pin 10) a D9, IN4 (pin 15) a D10 y EN2 (pin 9) a +5 V.
 
-### DS1307
-
-| Pin | Nombre | Se conecta a |
-|---|---|---|
-| 1 | X1 | Cristal 32.768 kHz |
-| 2 | X2 | Cristal 32.768 kHz |
-| 3 | VBAT | Pila 3 V |
-| 4 | GND | GND |
-| 5 | SDA | Nano A4 |
-| 6 | SCL | Nano A5 |
-| 7 | SQW (`SOUT`) | Sin conectar (no a +5 V directo: es salida de colector abierto y puede dar contención; si se usa, pull-up de 10 kΩ) |
-| 8 | VCC | +5 V |
-
 ### PCF8574A
 
 | Pin | Nombre | Se conecta a |
@@ -191,8 +178,8 @@ Abrir = D9 en alto y D10 en bajo; cerrar = D9 en bajo y D10 en alto; detenido = 
 
 | Dispositivo | Dirección | En el I2C Debugger |
 |---|---|---|
-| PCF8574A (A0–A2 a GND) | 0x38 | `S 70 A …` |
-| DS1307 | 0x68 | `S D0 A …` |
+| PCF8574A del LCD (A0–A2 a GND) | 0x38 | `S 70 A …` |
+| PCF8574/PCF8574A de la alarma | 0x20 o 0x27 (según A0–A2) | `S 40 A …` o `S 4E A …` |
 
 Si en lugar del PCF8574A se usa un `PCF8574` (sin A), con A0–A2 a GND la dirección es 0x20; hay que cambiarla en el sketch.
 
@@ -260,11 +247,11 @@ Con los valores por defecto y x60:
 - **Luces:** mover el control de luz del `LDR` (propiedad *Light Level* o el potenciómetro de sustitución): por debajo de 30 % se encienden, por encima de 45 % se apagan. `F3` fuerza ON/OFF manual.
 - **Cortina manual:** `1` abrir, `2` cerrar, `0` detener.
 - Para una demostración más corta, programar ventanas cercanas a la hora del demo.
-- Para operación real: elegir velocidad **x1** y, en el sketch, poner `FIJAR_HORA_AL_ARRANCAR 0` (el reloj respeta la hora del DS1307) y `velocidad = 1`.
+- Para operación real: elegir velocidad **x1** (`velocidad = 1`). No hay RTC que conserve la hora entre arranques: cada reinicio fija `HORA_ARRANQUE:MIN_ARRANQUE` (editable en el sketch) y se corrige a mano con `F1`.
 
 ## Rendimiento de la simulación
 
-El sketch ya está pensado para simular rápido: el reloj corre en software con el **Timer1** (100 Hz) y solo consulta el DS1307 una vez por minuto, el LCD se repinta solo donde cambia y el `loop` duerme en modo IDLE entre ticks. Si aun así va lenta:
+El sketch ya está pensado para simular rápido: el reloj corre enteramente en software con el **Timer1** (100 Hz, sin RTC externo que consultar), el LCD se repinta solo donde cambia y el `loop` duerme en modo IDLE entre ticks. Si aun así va lenta:
 
 1. Cerrar el **I2C Debugger** y el **Virtual Terminal** (los instrumentos cuestan mucha CPU).
 2. Revisar la barra inferior de Proteus: si la carga de CPU está al máximo, es el límite del equipo.
@@ -321,5 +308,5 @@ Para la entrega, poner `DEPURAR 0`.
 ## Notas de simulación
 
 - La simulación puede correr más lento que el tiempo real; el demo se estira en consecuencia.
-- Si el DS1307 no responde, la pantalla muestra `ERROR: sin RTC` y el terminal `ERROR: no se encontró el RTC DS1307`: revisar pull-ups, cristal y cableado I2C.
+- No hay RTC: si el expansor de la alarma o el LCD 16x2 no responden, el sistema sigue funcionando (esos dos son opcionales); el reloj principal nunca depende del bus I2C.
 - Los horarios guardados en EEPROM persisten entre simulaciones solo si Proteus conserva el estado; al cambiar `CONFIG_MAGIC` en el sketch se restauran los valores por defecto.
