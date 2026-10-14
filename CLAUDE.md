@@ -23,7 +23,7 @@ Entregables: implementación con **Arduino**, simulación/virtualización en **P
 
 ## Estructura
 
-- `sistema_casa\sistema_casa.ino` — sketch único (Arduino Nano v3). Librerías: `Keypad`, `LcdI2C` (propia), `EEPROM`, `Wire`, `avr/sleep.h`. El DS1307 se maneja con funciones propias (`rtcLeer`, `rtcSetHora`, ...) sobre `Wire` y **no con `RTClib`**.
+- `sistema_casa\sistema_casa.ino` — sketch único (Arduino Nano v3). **A propósito un solo archivo**: se probó separarlo en `.h/.cpp` (ver `MEMORY.md` "Separación en archivos (y vuelta atrás)") pero causaba errores de "multiple definition" al compilar en VSM Studio si los archivos separados quedaban también en la carpeta del proyecto de Proteus; se volvió a un único archivo para evitar ese riesgo. Librerías: `Keypad`, `LcdI2C` (propia), `EEPROM`, `Wire`, `avr/sleep.h`. No hay RTC: la hora corre en software sobre el Timer1.
 - `librerias\LcdI2C\` — librería propia para LCD HD44780 por I2C (`LcdI2C.h`, `LcdI2C.cpp`, `library.properties`, `examples\Prueba20x4`). Se instala copiando la carpeta a `C:\Users\Erick\Documents\Arduino\libraries\LcdI2C\`. Sustituye a `LiquidCrystal I2C`.
 - `PROTEUS.md` — componentes, cableado, uso del teclado, guion de demostración y solución de problemas en Proteus.
 - `README.md` — descripción general del proyecto para quien lo revise.
@@ -34,7 +34,7 @@ Entregables: implementación con **Arduino**, simulación/virtualización en **P
 ## Restricciones de compilación (VSM Studio de Proteus, Arduino IDE 1.8.5)
 
 - No resuelve dependencias transitivas (p. ej. Adafruit BusIO de `RTClib`): no reintroducir librerías con dependencias.
-- Su generador de prototipos (`mksketch`) pone todos los prototipos **al inicio del archivo, antes de cualquier `struct`/`enum`**. Por eso **ninguna función del `.ino` puede usar tipos propios (`Hora`, `Ventana`, `Pantalla`, ...) en su firma ni como tipo de retorno**: usar `uint8_t`/índices y variables globales (`ahoraG`, `cfg`). Tampoco métodos en línea dentro de `struct`/`class` del `.ino`. Si no, falla con `'X' does not name a type`. Esta restricción **no** aplica a las clases dentro de librerías (`LcdI2C`), porque esas no pasan por `mksketch`.
+- Su generador de prototipos (`mksketch`) pone todos los prototipos **al inicio del archivo, antes de cualquier `struct`/`enum`**. Por eso **ninguna función del `.ino` puede usar tipos propios (`Hora`, `Ventana`, `Config`, `Pantalla`, ...) en su firma ni como tipo de retorno**: usar `uint8_t`/índices y variables globales (`ahoraG`, `cfg`). Tampoco métodos en línea dentro de `struct`/`class` del `.ino`. Si no, falla con `'X' does not name a type`. Esta restricción **no** aplica a las clases dentro de librerías (`LcdI2C`), porque esas no pasan por `mksketch`.
 - `arduino-cli` no detecta el caso anterior; hay que probar con `mksketch` (en `C:\Program Files (x86)\Labcenter Electronics\Proteus 8 Professional\Tools\ARDUINO\`) y el `avr-gcc` de `C:\Program Files (x86)\Arduino\hardware\tools\avr\bin`, con la línea de comandos del log de VSM Studio y `-O0`.
 - Las librerías se toman de `Documents\Arduino\libraries`. **No agregar archivos de librerías al árbol del proyecto de VSM Studio** (ver `MEMORY.md`): el proyecto solo contiene `main.ino`.
 - Todo archivo con clases debe ser `.cpp`, nunca `.c` (VSM Studio compila `.c` como C).

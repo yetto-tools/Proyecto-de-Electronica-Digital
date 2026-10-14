@@ -5,10 +5,11 @@ Proyecto del curso de **Electrónica Digital (UMG)**. Sistema domótico basado e
 ## Funciones
 
 - **Iluminación automática**: un LDR mide la luz ambiente; las luces se encienden con poca luz y se apagan con mucha (con histéresis). `F3` alterna AUTO / ON / OFF manual.
-- **Riego del jardín programado**: una ventana de mañana y una de tarde, con hora de inicio y fin configurables.
+- **Riego del jardín por horario Y humedad**: una ventana de mañana y una de tarde habilitan el riego; dentro de ellas, un sensor de humedad del suelo (con histéresis) decide si realmente hace falta regar.
 - **Cortinas con motor DC** (puente H L293D): se abren y cierran por horario o manualmente con el teclado.
+- **Alarma de seguridad armada por horario**: se arma sola de noche; un sensor de intrusión dispara un buzzer. Se arma/desarma a mano desde el teclado con una clave.
 - **Configuración desde teclado 4x4** y pantalla LCD 20x4; los valores se guardan en EEPROM.
-- **Reloj de 24 h editable**: el sistema trabaja solo con la hora del día (`HH:MM:SS`), sin fecha; los eventos ocurren a la hora programada. La hora se ajusta desde el teclado y la velocidad (x1, x10, x60, x300) se cambia sin recompilar para las demostraciones.
+- **Reloj de 24 h editable**: el sistema trabaja solo con la hora del día (`HH:MM:SS`), sin fecha, sin RTC externo (reloj en software sobre el Timer1); los eventos ocurren a la hora programada. La hora se ajusta desde el teclado y la velocidad (x1, x10, x60, x300) se cambia sin recompilar para las demostraciones.
 
 Todo corre en **un solo Arduino Nano v3**.
 
@@ -17,10 +18,10 @@ Todo corre en **un solo Arduino Nano v3**.
 | Bloque | Componente |
 |---|---|
 | Microcontrolador | Arduino Nano v3 (ATmega328P, 16 MHz) |
-| Reloj de tiempo real | DS1307 (I2C, 0x68) con cristal de 32.768 kHz |
 | Pantalla | LCD 20x4 (LM044L) mediante expansor PCF8574A (I2C, 0x38) |
-| Pantalla 2 | Módulo LCD 16x2 I2C `JHD-2X16-I2C` (4 pines: VDD, VSS, SCL, SDA), dirección `0x3E` (`$7C` en el I2C Debugger): muestra la hora tal como la lee el DS1307 |
-| Entrada | Teclado matricial 4x4, LDR (luz) |
+| Pantalla 2 (opcional) | Módulo LCD 16x2 I2C `JHD-2X16-I2C`, dirección `0x3E`: muestra la hora del sistema |
+| Entrada | Teclado matricial 4x4, LDR (luz), potenciómetro (humedad del suelo, A6) |
+| Alarma | Expansor PCF8574/PCF8574A (0x20 u 0x27) con buzzer y sensor de intrusión |
 | Salidas | Riego (D7), luces (D8), motor de cortina por L293D (D9 abrir, D10 cerrar), display de 7 segmentos con el tiempo de riego (D3, A3, D13) |
 
 ![Diagrama de conexión](diagrama_conexion.png)
@@ -51,13 +52,14 @@ Pines del Nano según el conector de 30 pines (`TX1`=1 … `D2`=5 … `A0`=19 �
 | A3 | 22 | Display 7 seg: reloj | `SRCLK` (pin 11) de los cuatro 74HC595 |
 | D13 | 16 | Display 7 seg: latch | `RCLK` (pin 12) de los cuatro 74HC595 |
 | A0 | 19 | Luz ambiente | Unión LDR – resistencia de 10 kΩ |
-| A4 | 23 | SDA (I2C) | DS1307 pin 5, PCF8574A pin 15, pull-up 4.7 kΩ a +5 V |
-| A5 | 24 | SCL (I2C) | DS1307 pin 6, PCF8574A pin 14, pull-up 4.7 kΩ a +5 V |
+| A6 | 3 | Humedad del suelo | Cursor del potenciómetro |
+| A4 | 23 | SDA (I2C) | PCF8574A pin 15 (LCD), expansor de la alarma, pull-up 4.7 kΩ a +5 V |
+| A5 | 24 | SCL (I2C) | PCF8574A pin 14 (LCD), expansor de la alarma, pull-up 4.7 kΩ a +5 V |
 | D1 / TX1 | 1 | Salida serie | Virtual Terminal `RXD` |
 | 5V | 27 | Alimentación | Todos los puntos +5 V |
 | GND | 29 | Masa | Todos los puntos GND |
 
-Los pines D0 (RX serie), A6 y A7 quedan libres.
+El buzzer y el sensor de intrusión de la alarma van por el expansor I2C (ver `PROTEUS.md`), no por pines del Nano: ya no quedan pines digitales libres.
 
 ### Display de 7 segmentos (tiempo de riego, MM:SS)
 
@@ -171,7 +173,8 @@ Abrir = D9 en alto y D10 en bajo; cerrar = D9 en bajo y D10 en alto; detenido = 
 
 ```
 sistema_casa/
-  sistema_casa.ino        Sketch principal
+  sistema_casa.ino        Sketch principal (archivo único a propósito: VSM Studio
+                          solo admite un main.ino)
 librerias/
   LcdI2C/                 Librería propia para LCD I2C (16x2, 20x4)
 build/
@@ -191,7 +194,7 @@ CLAUDE.md, MEMORY.md      Contexto técnico del proyecto
      ```powershell
      & "C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" compile --fqbn arduino:avr:nano:cpu=atmega328 --libraries librerias --output-dir build sistema_casa
      ```
-   - **VSM Studio de Proteus**: pegar el sketch en `main.ino`. El proyecto solo debe contener ese archivo.
+   - **VSM Studio de Proteus**: pegar el sketch en `main.ino`. El proyecto solo debe contener ese archivo (no agregar ahí ningún otro `.h`/`.cpp`).
 
 ## Cómo simular
 

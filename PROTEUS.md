@@ -2,11 +2,11 @@
 
 Diagrama pictórico de conexión: `diagrama_conexion.png` (editable: `diagrama_conexion.svg`).
 
-> Proteus 8.13 no trae el Arduino Nano v3 de fábrica: hay que instalar una librería de Arduino para Proteus (por ejemplo, la de The Engineering Projects). El resto de componentes (`DS1307`, `PCF8574A`, `LM044L`, `KEYPAD-SMALLCALC`, `L293D`, `LDR`) son de la librería estándar; conviene confirmarlo buscándolos con la tecla `P` en el selector de dispositivos.
+> Proteus 8.13 no trae el Arduino Nano v3 de fábrica: hay que instalar una librería de Arduino para Proteus (por ejemplo, la de The Engineering Projects). El resto de componentes (`PCF8574`/`PCF8574A`, `LM044L`, `KEYPAD-SMALLCALC`, `L293D`, `LDR`, `BUZZER`) son de la librería estándar; conviene confirmarlo buscándolos con la tecla `P` en el selector de dispositivos.
 
 ## Firmware
 
-**Opción A: compilar desde Proteus (VSM Studio).** Pegar el contenido de `sistema_casa\sistema_casa.ino` en el `main.ino` del proyecto. **El proyecto de VSM Studio debe contener solo `main.ino`**: no agregar ahí archivos de librerías.
+**Opción A: compilar desde Proteus (VSM Studio).** Pegar el contenido de `sistema_casa\sistema_casa.ino` en el `main.ino` del proyecto. **El proyecto de VSM Studio debe contener solo `main.ino`**: no agregar ahí archivos de librerías ni ningún otro `.h`/`.cpp` (se probó separar el sketch en varios archivos y causaba errores de "multiple definition" al enlazar si esos archivos quedaban también en la carpeta del proyecto — ver `MEMORY.md`).
 
 Librerías necesarias en `C:\Users\Erick\Documents\Arduino\libraries\`:
 
@@ -23,17 +23,20 @@ Librerías necesarias en `C:\Users\Erick\Documents\Arduino\libraries\`:
 | Componente | Nombre en Proteus | Conexión |
 |---|---|---|
 | Microcontrolador | Arduino Nano v3 (librería Arduino para Proteus) | — |
-| Reloj | `DS1307` | SDA→A4, SCL→A5, cristal `CRYSTAL` 32.768 kHz en X1/X2, VBAT a pila 3 V (o 3 V fijo) |
 | Expansor del LCD | `PCF8574A` | SDA→A4, SCL→A5, **A0, A1, A2 a GND → dirección 0x38**; salidas al LCD según la tabla de abajo |
 | Pantalla | `LM044L` (20x4) | Ver tabla PCF8574A → LM044L |
-| Pantalla 2 (hora del DS1307) | `JHD-2X16-I2C` (módulo 16x2 con expansor integrado) | Solo 4 pines: VDD→+5 V, VSS→GND, SCL→A5, SDA→A4 (mismo bus que el resto). Dirección **0x3E** (`$7C` en el I2C Debugger); si usa otra, el sketch la busca solo (0x20–0x27 o 0x38–0x3F). Usa un protocolo de comandos propio (no el del PCF8574): el sketch lo maneja con `LCD2_JHD 1`. Verificado: muestra la hora del DS1307 |
+| Pantalla 2 (hora del sistema, opcional) | `JHD-2X16-I2C` (módulo 16x2 con expansor integrado) | Solo 4 pines: VDD→+5 V, VSS→GND, SCL→A5, SDA→A4 (mismo bus que el resto). Dirección **0x3E** (`$7C` en el I2C Debugger); si usa otra, el sketch la busca solo (0x20–0x27 o 0x38–0x3F, excluyendo la del LCD 20x4 y la del expansor de la alarma). Usa un protocolo de comandos propio (no el del PCF8574): el sketch lo maneja con `LCD2_JHD 1` |
 | Teclado | Teclado 4x4 con `0`–`9`, `F0`–`F3`, `ON/C`, `ok` | filas→D2, D4, D5, D6 · columnas→D11, D12, A2, A1 |
 | Luz ambiente | `LDR` + resistencia 10 kΩ | +5 V → LDR → A0 → 10 kΩ → GND (más luz = más voltaje) |
+| Humedad del suelo | Potenciómetro (`POT-HG` o similar) | +5 V → cursor → A6 → GND (más húmedo = más voltaje, igual que el LDR) |
 | Bomba de riego | `MOTOR` + transistor/`RELAY`, o `LED-BLUE` con 330 Ω | D7 |
 | Luces | `LED-YELLOW` + 330 Ω | D8 |
 | Motor de cortina | `L293D` + `MOTOR` DC | IN1→D9 (abrir), IN2→D10 (cerrar), EN1 y VCC1 (`VSS`) a +5 V, VCC2 (`VS`) a +12 V (o +5 V según el motor), motor entre OUT1 y OUT2, GND a masa |
 | Tiempo de riego (MM:SS) | 4 × `7SEG-COM-CATHODE` + 4 × `74HC595` en cadena | D3 → SER del 1.º; A3 → SRCLK de los cuatro; D13 → RCLK de los cuatro; QH' de cada 595 → SER del siguiente; OE a GND, SRCLR a +5 V; QA–QG → segmentos a–g, QH → punto; cátodo común a GND |
-| Salida de texto | `VIRTUAL TERMINAL` | RXD del terminal → TX (D1), 9600 baud |
+| Expansor de la alarma | `PCF8574` (o `PCF8574A`) | SDA→A4, SCL→A5, dirección **0x20** (A0–A2 a GND) o **0x27** (A0–A2 a +5 V) — el sketch prueba las dos; P0→buzzer, P1→sensor de intrusión (ver filas siguientes) |
+| Buzzer de alarma | `BUZZER` o `SOUNDER` (activo, reacciona a un nivel DC) | P0 del expansor de la alarma, GND del otro terminal |
+| Sensor de intrusión | `BUTTON` (o `SW-SPST`) entre P1 del expansor y GND | P1 queda en alto por el pull-up interno del PCF8574; al presionar el botón (simula PIR/contacto) baja a GND y dispara la alarma. **Activo en BAJO** |
+| Salida de texto | `VIRTUAL TERMINAL` | RXD del terminal → TX (D1), 115200 baud |
 | Diagnóstico I2C (opcional) | `I2C DEBUGGER` (Instruments) | **SDA→A4, SCL→A5** |
 
 Pull-ups de 4.7 kΩ a +5 V en SDA y SCL (una sola pareja para todo el bus I2C).
@@ -64,13 +67,14 @@ Pines del Nano según el conector de 30 pines (`TX1`=1 … `D2`=5 … `A0`=19 �
 | A3 | 22 | Display 7 seg: reloj | `SRCLK` (pin 11) de los cuatro 74HC595 |
 | D13 | 16 | Display 7 seg: latch | `RCLK` (pin 12) de los cuatro 74HC595 |
 | A0 | 19 | Luz ambiente | Unión LDR – resistencia de 10 kΩ |
-| A4 | 23 | SDA (I2C) | DS1307 pin 5, PCF8574A pin 15, pull-up 4.7 kΩ a +5 V |
-| A5 | 24 | SCL (I2C) | DS1307 pin 6, PCF8574A pin 14, pull-up 4.7 kΩ a +5 V |
+| A6 | 3 | Humedad del suelo | Cursor del potenciómetro |
+| A4 | 23 | SDA (I2C) | PCF8574A pin 15 (LCD), expansor de la alarma, JHD-2X16-I2C (si está), pull-up 4.7 kΩ a +5 V |
+| A5 | 24 | SCL (I2C) | PCF8574A pin 14 (LCD), expansor de la alarma, JHD-2X16-I2C (si está), pull-up 4.7 kΩ a +5 V |
 | D1 / TX1 | 1 | Salida serie | Virtual Terminal `RXD` |
 | 5V | 27 | Alimentación | Todos los puntos +5 V |
 | GND | 29 | Masa | Todos los puntos GND |
 
-Los pines D0 (RX serie), A6 y A7 quedan libres. El LED `LED & Reset` del Nano de Proteus está en D13, así que parpadeará con los pulsos del latch del display: es normal.
+Ya no quedan pines digitales libres (D0/RX sigue libre, reservado para programar). El buzzer y el sensor de intrusión de la alarma van por el expansor I2C, no por pines del Nano (ver tabla de componentes). El LED `LED & Reset` del Nano de Proteus está en D13, así que parpadeará con los pulsos del latch del display: es normal.
 
 ### Display de 7 segmentos (tiempo de riego)
 
@@ -96,6 +100,26 @@ Cátodo común (`COM`) de cada dígito a GND. Si el display no muestra el númer
 | +5 V | LDR terminal 1 |
 | LDR terminal 2 | Nano A0 y resistencia de 10 kΩ (terminal 1) |
 | Resistencia de 10 kΩ (terminal 2) | GND |
+
+### Humedad del suelo
+
+| De | A |
+|---|---|
+| +5 V | Potenciómetro terminal 1 |
+| Potenciómetro terminal 2 (GND) | GND |
+| Potenciómetro cursor | Nano A6 |
+
+Igual que la LDR: más húmedo (más voltaje en el cursor) = lectura más alta.
+
+### Alarma (expansor I2C + buzzer + sensor de intrusión)
+
+| De | A |
+|---|---|
+| Expansor `PCF8574`/`PCF8574A`, SDA/SCL | Nano A4/A5 (mismo bus que el LCD) |
+| Expansor P0 | Buzzer/sounder, terminal + (el otro terminal a GND) |
+| Expansor P1 | Un terminal del botón (simula PIR/contacto); el otro terminal del botón a GND |
+
+No se conecta nada más a P1: el PCF8574 lo deja en alto con su pull-up interno (~100 µA) cuando el sketch lo configura como entrada; al presionar el botón se va a GND y el sketch lo detecta como intrusión. Si P1 se deja sin el botón conectado, también queda en alto (sin disparar) gracias al mismo pull-up.
 
 ### Motor de cortina (L293D)
 
@@ -269,7 +293,7 @@ Para la entrega, poner `DEPURAR 0`.
 
 ### El Virtual Terminal no muestra texto
 
-`RXD` del terminal va a **D1/TX** del Arduino (TXD del terminal puede ir a D0 o quedar libre); 9600 baud, 8 bits, sin paridad, 1 stop. Reabrirlo con **Debug → Virtual Terminal**. El sketch imprime una línea por minuto simulado (subir la velocidad con `F2`).
+`RXD` del terminal va a **D1/TX** del Arduino (TXD del terminal puede ir a D0 o quedar libre); 115200 baud, 8 bits, sin paridad, 1 stop. Reabrirlo con **Debug → Virtual Terminal**. El sketch imprime una línea por minuto simulado (subir la velocidad con `F2`).
 
 ### El LCD se ve iluminado pero sin texto
 
