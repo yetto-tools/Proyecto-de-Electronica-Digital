@@ -1,21 +1,26 @@
 /*
   Sistema para Casa (Grupo 1)
   - Iluminación automática: enciende y apaga las luces según la luz ambiente (LDR)
-  - Riego del jardín programado: ventana de mañana y ventana de tarde
+  - Riego del jardín programado por horario Y nivel de humedad (con histéresis)
   - Cortinas con motor DC (puente H L293D): abrir y cerrar por horario o manualmente
+  - Alarma de seguridad armada por horario (sensor de intrusión + clave por teclado)
   - LCD 20x4 con pantalla de estado y menú de configuración
   - Teclado 4x4 para programar horarios y umbrales (se guardan en EEPROM)
 
   Hardware (pensado para simular en Proteus 8.13):
   - Arduino Nano v3 (ATmega328P, 16 MHz)
-  - RTC DS1307 por I2C (A4 = SDA, A5 = SCL)
-  - LCD 20x4 (LM044L) con expansor PCF8574A en el mismo bus, dirección 0x38
+  - LCD 20x4 (LM044L) con expansor PCF8574A por I2C (A4 = SDA, A5 = SCL), dirección 0x38
   - LDR en A0: +5 V - LDR - A0 - 10 kΩ - GND (más luz = más voltaje)
+  - Potenciómetro en A6 que simula el sensor de humedad del suelo (0 = seco, 1023 = húmedo)
   - Teclado 4x4: filas D2,D4,D5,D6 / columnas D11,D12,A2,A1
   - Bomba de riego (relé/LED)   -> D7
   - Luces (LED)                 -> D8
   - Motor de cortina (L293D)    -> IN1 (abrir) D9, IN2 (cerrar) D10
   - Display 7 seg (tiempo de riego, MM:SS): 4 x 74HC595 en cadena -> SER D3, SRCLK A3, RCLK D13
+  - Buzzer de alarma y sensor de intrusión (botón/PIR): en un expansor PCF8574/PCF8574A
+    propio (0x20 u 0x27) en el mismo bus I2C — no quedaba ningún pin digital libre del Nano.
+    P0 = buzzer (salida), P1 = sensor de intrusión (entrada, activo en BAJO por el pull-up
+    interno del PCF8574: botón/PIR a GND dispara la alarma).
 
   Teclas (KEYPAD-SMALLCALC de Proteus):
       1   2   3   F0        F0 = menú
@@ -24,13 +29,17 @@
       ON/C 0  OK  F3        F3 = modo de luces (AUTO / ON / OFF)
       ON/C = borrar / atrás      OK = aceptar
       En la pantalla de estado: 1 = abrir cortina, 2 = cerrar, 0 = detener motor,
+      3 = armar/desarmar alarma (pide clave, ver CLAVE_ALARMA)
 
-  Reloj: contador de 24 h (HH:MM:SS) que corre en software con el Timer1 (100 Hz); el DS1307
-  se lee al arrancar, se escribe al editar la hora y se sincroniza una vez por minuto.
-  Los eventos (riego, luces, cortina) ocurren a las horas programadas; no hay fecha.
+  Reloj: contador de 24 h (HH:MM:SS) que corre enteramente en software con el Timer1 del
+  ATmega328P (CTC, 100 Hz); no hay RTC externo. Al arrancar se fija a HORA_ARRANQUE:MIN_ARRANQUE
+  (no hay batería que conserve la hora) y se corrige desde el teclado (F1). Los eventos (riego,
+  luces, cortina, alarma) ocurren a las horas programadas; no hay fecha.
 
-  Librerías: Keypad y LcdI2C (propia). El DS1307 se maneja con funciones propias
-  sobre Wire (sin RTClib) para compilar en VSM Studio.
+  Librerías: Keypad y LcdI2C (propia).
+
+  Archivo único a propósito: el proyecto de VSM Studio (Proteus) solo admite un `main.ino`
+  (ver CLAUDE.md). Por eso todo el sketch vive aquí, en un solo archivo.
 */
 
 #include <Wire.h>
@@ -43,16 +52,15 @@
 // Velocidad del reloj: segundos simulados por cada segundo real (se cambia desde
 // el menú "Velocidad reloj"). Para uso real, elegir x1.
 const uint16_t VELOCIDADES[4] = { 1, 10, 60, 300 };
-uint16_t velocidad = 60;                    // velocidad al arrancar
-// 1 = al arrancar fija HORA_ARRANQUE (demo repetible en Proteus); 0 = respeta el DS1307
-#define FIJAR_HORA_AL_ARRANCAR 1
-const uint8_t HORA_ARRANQUE = 5, MIN_ARRANQUE = 55;
+uint16_t velocidad = 1;                    // velocidad al arrancar
+// Hora fijada en cada arranque (no hay RTC con batería que la conserve); ajustar con F1.
+const uint8_t HORA_ARRANQUE = 14, MIN_ARRANQUE = 38;
 
 // ---------- Depuración ----------
 // 1 = mensajes [DBG] por serie (etapas del arranque y una línea por segundo real) y los
 // dos puntos del display de 7 segmentos parpadean cada segundo real (si parpadean, el
 // bucle principal corre). Con 0 los dos puntos quedan fijos.
-#define DEPURAR 1
+#define DEPURAR 0
 
 // ---------- Display de 7 segmentos: tiempo de riego (MM:SS) ----------
 // 4 x 74HC595 en cadena (uno por dígito, cátodo común), sin multiplexar.
@@ -64,16 +72,20 @@ const uint8_t PIN_7S_LATCH = 13;        // RCLK  (pin 12 de los cuatro)
 const uint8_t SEG7[10] = { 0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F };
 
 // ---------- Pines ----------
-const uint8_t PIN_LDR           = A0;
-const uint8_t PIN_BOMBA         = 7;
-const uint8_t PIN_LUCES         = 8;
-const uint8_t PIN_CORTINA_ABRIR = 9;    // IN1 del L293D
-const uint8_t PIN_CORTINA_CERRAR = 10;  // IN2 del L293D
+const uint8_t PIN_LDR            = A0;
+const uint8_t PIN_HUMEDAD        = A6;   // potenciómetro: simula el sensor de humedad del suelo
+const uint8_t PIN_BOMBA          = 7;
+const uint8_t PIN_LUCES          = 8;
+const uint8_t PIN_CORTINA_ABRIR  = 9;    // IN1 del L293D
+const uint8_t PIN_CORTINA_CERRAR = 10;   // IN2 del L293D
 
 // Tiempo que el motor de la cortina gira en cada movimiento
 const unsigned long CORTINA_MS = 4000;
 
-// Hora del día leída del RTC
+// Clave para armar/desarmar la alarma manualmente desde el teclado
+const char CLAVE_ALARMA[] = "1234";
+
+// Hora del día (contador de 24 h en software, sin RTC externo)
 struct Hora {
   uint8_t h, m, s;
 };
@@ -87,25 +99,29 @@ struct Ventana {
   uint8_t hFin, mFin;
 };
 
-enum IndiceVentana : uint8_t { V_RIEGO_AM, V_RIEGO_PM, V_CORTINA, N_VENTANAS };
+enum IndiceVentana : uint8_t { V_RIEGO_AM, V_RIEGO_PM, V_CORTINA, V_ALARMA, N_VENTANAS };
 
 struct Config {
   uint8_t magic;
   Ventana v[N_VENTANAS];
   uint8_t luzOn;    // % : por debajo de este valor (oscuro) se encienden las luces
   uint8_t luzOff;   // % : por encima de este valor (claro) se apagan
+  uint8_t humMin;   // % : por debajo de este valor (seco) se enciende la bomba
+  uint8_t humMax;   // % : por encima de este valor (húmedo) se apaga
 };
 
-const uint8_t CONFIG_MAGIC = 0xA7;   // cambiar si cambia Config o sus valores por defecto
+const uint8_t CONFIG_MAGIC = 0xA8;   // cambiar si cambia Config o sus valores por defecto
 
 const Config CONFIG_DEFECTO = {
   CONFIG_MAGIC,
   {
     {  6,  0,  6, 30 },   // riego mañana
     { 18,  0, 18, 30 },   // riego tarde
-    {  7,  0, 19,  0 }    // cortina: abre 07:00, cierra 19:00
+    {  7,  0, 19,  0 },   // cortina: abre 07:00, cierra 19:00
+    { 23,  0,  6,  0 }    // alarma armada (cruza medianoche)
   },
-  30, 45
+  30, 45,
+  35, 60
 };
 
 Config cfg;
@@ -132,6 +148,15 @@ byte pinesFilas[FILAS]       = { 2, 4, 5, 6 };
 byte pinesColumnas[COLUMNAS] = { 11, 12, A2, A1 };
 Keypad teclado = Keypad(makeKeymap(teclas), pinesFilas, pinesColumnas, FILAS, COLUMNAS);
 
+// ---------- Expansor I2C de la alarma (buzzer + sensor de intrusión) ----------
+// PCF8574/PCF8574A dedicado: no quedaba ningún pin digital libre del Nano.
+// P0 = buzzer (salida); P1 = sensor de intrusión (entrada cuasi-bidireccional: se
+// escribe en 1 para que el pull-up interno la deje en alto, el sensor la lleva a GND).
+const uint8_t BIT_BUZZER    = 0x01;
+const uint8_t BIT_INTRUSION = 0x02;
+uint8_t alarmaDir = 0;                // dirección encontrada (0 = no hay expansor, alarma deshabilitada)
+uint8_t alarmaExpEstado = BIT_INTRUSION;
+
 // ---------- Estado de los actuadores ----------
 bool bombaOn = false;
 bool lucesOn = false;
@@ -142,8 +167,12 @@ bool cortinaAbierta = false;         // última posición alcanzada
 bool cortinaVentPrev = false;        // estado anterior de la ventana de cortina
 unsigned long cortinaFin = 0;
 
+bool alarmaSonando = false;
+bool alarmaDesarmadaManual = false;  // se limpia al cambiar de estado por horario
+bool alarmaArmadaPrev = false;       // la ventana de alarma está activa
+
 unsigned long ultimoCiclo = 0;
-uint8_t segSync = 0;                 // segundos reales desde la última sincronización con el DS1307
+uint8_t tickTeclado = 0;             // cuenta ticks de 10 ms para sondear el teclado a ~33 Hz
 
 // Base de tiempo: Timer1 en modo CTC a 100 Hz (16 MHz / 64 / 2500). Lo usa el reloj en
 // software; el Timer0 queda para millis()/delay()/Keypad.
@@ -162,14 +191,14 @@ const unsigned long PERIODO_MS = 500;
 uint8_t ultimoMinImpreso = 255;
 
 Hora ahoraG;                         // hora del sistema (contador de 24 h en software)
-Hora horaRtc;                        // última lectura cruda del DS1307
 uint8_t luzG = 0;
+uint8_t humG = 0;                    // última lectura de humedad del suelo (%)
 uint16_t refMin = 0xFFFF;            // próximo inicio (o fin si está regando) de riego
 uint16_t riegoSeg = 0;               // segundos (simulados) que lleva regando; conserva el último valor
 bool     dosPuntos = true;           // los dos puntos del display (latido en modo DEPURAR)
 
 // ---------- Estado de la interfaz ----------
-enum Pantalla : uint8_t { P_INICIO, P_MENU, P_VENTANA, P_UMBRAL, P_HORA, P_VELOC, P_MSG };
+enum Pantalla : uint8_t { P_INICIO, P_MENU, P_VENTANA, P_UMBRAL, P_HORA, P_VELOC, P_CLAVE, P_MSG };
 
 Pantalla pantalla    = P_INICIO;
 Pantalla pantallaSig = P_INICIO;
@@ -179,88 +208,26 @@ uint8_t etapa   = 0;          // 0 = primer dato (inicio/oscuro), 1 = segundo (f
 char    entrada[5];
 uint8_t entradaLen = 0;
 Ventana tmpV;
-uint8_t tmpLuzOn = 0;
+uint8_t tmpUmbralMin = 0;
+uint8_t tipoUmbral = 0;       // 0 = luz (P_UMBRAL edita luzOn/luzOff), 1 = humedad (humMin/humMax)
 bool    redibujar = true;
 unsigned long msgFin = 0;
 char msgL0[21], msgL1[21];
 char pantallaLcd[4][20];   // lo que muestra el LCD ahora (0 = desconocido, fuerza la escritura)
 
-// Menú: riego AM, riego PM, cortinas, umbral de luz, ajustar hora, velocidad del reloj
-const uint8_t N_MENU = 6;
-const uint8_t M_UMBRAL = 3, M_HORA = 4, M_VELOC = 5;
+// Menú: riego AM, riego PM, cortinas, alarma, umbral de luz, umbral de humedad, ajustar hora, velocidad
+const uint8_t N_MENU = 8;
+const uint8_t M_UMBRAL = 4, M_HUMEDAD = 5, M_HORA = 6, M_VELOC = 7;
 
-// ---------- Reloj DS1307 (controlador mínimo sobre Wire) ----------
-// Sin métodos ni clases a propósito: el generador de prototipos de VSM Studio
-// se confunde con los métodos en línea de un struct.
-const uint8_t DS1307_DIR = 0x68;
-
-uint8_t bcdABin(uint8_t v) { return v - 6 * (v >> 4); }
-uint8_t binABcd(uint8_t v) { return v + 6 * (v / 10); }
-
-bool rtcBegin() {
-  Wire.begin();
-  Wire.beginTransmission(DS1307_DIR);
-  return Wire.endTransmission() == 0;
-}
-
-// Bit CH (bit 7 del registro 0) en 1 = reloj detenido
-bool rtcCorriendo() {
-  Wire.beginTransmission(DS1307_DIR);
-  Wire.write((uint8_t)0);
-  Wire.endTransmission();
-  Wire.requestFrom(DS1307_DIR, (uint8_t)1);
-  return Wire.available() && !(Wire.read() & 0x80);
-}
-
-// Lee la hora del DS1307 y la deja en la variable global horaRtc
-void rtcLeer() {
-  Hora t = {0, 0, 0};
-  Wire.beginTransmission(DS1307_DIR);
-  Wire.write((uint8_t)0);
-  Wire.endTransmission();
-  Wire.requestFrom(DS1307_DIR, (uint8_t)3);
-  if (Wire.available() < 3) { horaRtc = t; return; }
-  uint8_t rs = Wire.read();
-  uint8_t rm = Wire.read();
-  uint8_t rh = Wire.read();
-  t.s = bcdABin(rs & 0x7F);
-  t.m = bcdABin(rm & 0x7F);
-  if (rh & 0x40) {                         // modo 12 h
-    t.h = bcdABin(rh & 0x1F) % 12;
-    if (rh & 0x20) t.h += 12;
-  } else {
-    t.h = bcdABin(rh & 0x3F);
-  }
-  horaRtc = t;
-}
-
-// Lee el DS1307 y toma su hora como hora del sistema
-void rtcCargar() {
-  rtcLeer();
-  ahoraG = horaRtc;
-}
-
-void rtcSetHora(uint8_t h, uint8_t m, uint8_t s) {
-  Wire.beginTransmission(DS1307_DIR);
-  Wire.write((uint8_t)0);
-  Wire.write(binABcd(s));                  // CH = 0: el reloj corre
-  Wire.write(binABcd(m));
-  Wire.write(binABcd(h));                  // modo 24 h
-  Wire.endTransmission();
-}
-
-// Reloj en software: contador de 24 h (HH:MM:SS) que vuelve a 00:00:00 al llegar a 24:00:00.
-// Suma `seg` segundos a ahoraG sin tocar el bus I2C.
+// ---------- Reloj en software ----------
+// Contador de 24 h (HH:MM:SS) que vuelve a 00:00:00 al llegar a 24:00:00. Suma `seg`
+// segundos a ahoraG; es la única base de tiempo del sistema (la avanza el Timer1,
+// ver ISR TIMER1_COMPA_vect).
 void relojAvanzar(uint32_t seg) {
   uint32_t total = ((uint32_t)ahoraG.h * 3600 + (uint32_t)ahoraG.m * 60 + ahoraG.s + seg) % 86400UL;
   ahoraG.h = total / 3600;
   ahoraG.m = (total / 60) % 60;
   ahoraG.s = total % 60;
-}
-
-// Escribe la hora de ahoraG en el DS1307 (respaldo y sincronización)
-void rtcEscribirTodo() {
-  rtcSetHora(ahoraG.h, ahoraG.m, ahoraG.s);
 }
 
 // ---------- Módulo JHD-2X16-I2C (protocolo de comandos) ----------
@@ -302,22 +269,101 @@ void lcd2Texto(uint8_t fila, const char* s) {
 #endif
 }
 
-// Pantalla 16x2: lee el DS1307 y muestra su hora tal cual (HH:MM:SS)
-void mostrarRtc() {
+void iniciarLcd2(uint8_t lcdDirPrincipal, uint8_t lcdDirAlarma) {
+  // Primero LCD2_DIR; si no responde, cualquier otro expansor PCF8574/PCF8574A del
+  // bus (0x20-0x27 o 0x38-0x3F) distinto del de la 20x4 y del de la alarma
+  Wire.beginTransmission(LCD2_DIR);
+  if (LCD2_DIR != lcdDirPrincipal && LCD2_DIR != lcdDirAlarma && Wire.endTransmission() == 0) lcd2Dir = LCD2_DIR;
+  for (uint8_t d = 0x20; !lcd2Dir && d <= 0x3F; d++) {
+    if (d == lcdDirPrincipal || d == lcdDirAlarma || (d > 0x27 && d < 0x38)) continue;
+    Wire.beginTransmission(d);
+    if (Wire.endTransmission() == 0) lcd2Dir = d;
+  }
+  if (lcd2Dir) {
+#if LCD2_JHD
+    jhdInicio();
+#else
+    lcd2 = new LcdI2C(lcd2Dir, 16, 2);
+    lcd2->begin();
+    lcd2->backlight();
+#endif
+    lcd2Texto(0, "Hora del sistema");
+    Serial.print(F("LCD 16x2 en 0x"));
+    Serial.println(lcd2Dir, HEX);
+  } else {
+    Serial.println(F("LCD 16x2 no encontrado (opcional)"));
+  }
+}
+
+// Pantalla 16x2: muestra la hora del sistema (ahoraG)
+void actualizarLcd2() {
   if (!lcd2Dir) return;
-  rtcLeer();
   char buf[17];
-  snprintf(buf, sizeof(buf), "    %02u:%02u:%02u    ", horaRtc.h, horaRtc.m, horaRtc.s);
+  snprintf(buf, sizeof(buf), "    %02u:%02u:%02u    ", ahoraG.h, ahoraG.m, ahoraG.s);
   lcd2Texto(1, buf);
+}
+
+// ---------- Alarma (armada por horario, expansor I2C para buzzer y sensor) ----------
+void alarmaExpWrite() {
+  Wire.beginTransmission(alarmaDir);
+  Wire.write(alarmaExpEstado);
+  Wire.endTransmission();
+}
+
+// true si el sensor de intrusión está disparado (pin en bajo)
+bool leerIntrusion() {
+  Wire.requestFrom(alarmaDir, (uint8_t)1);
+  if (!Wire.available()) return false;
+  uint8_t v = Wire.read();
+  return !(v & BIT_INTRUSION);
+}
+
+void setAlarmaSonando(bool on) {
+  if (on == alarmaSonando) return;
+  alarmaSonando = on;
+  if (on) alarmaExpEstado |= BIT_BUZZER;
+  else    alarmaExpEstado &= ~BIT_BUZZER;
+  if (alarmaDir) alarmaExpWrite();
+  Serial.println(on ? F("[EVENTO] ALARMA DISPARADA") : F("[EVENTO] Alarma silenciada"));
+}
+
+void controlAlarma() {
+  if (!alarmaDir) return;   // sin expansor: la alarma queda deshabilitada
+  bool armada = enVentana(V_ALARMA);
+  if (armada != alarmaArmadaPrev) {
+    alarmaArmadaPrev = armada;
+    alarmaDesarmadaManual = false;
+    Serial.println(armada ? F("[EVENTO] Alarma ARMADA") : F("[EVENTO] Alarma DESARMADA por horario"));
+    if (!armada) setAlarmaSonando(false);
+  }
+  if (armada && !alarmaDesarmadaManual && leerIntrusion()) {
+    setAlarmaSonando(true);
+  }
+}
+
+// Alterna armado/desarmado manual (solo tiene sentido dentro del horario de alarma)
+const char* alternarAlarmaManual() {
+  if (!alarmaArmadaPrev) return PSTR("Fuera de horario");
+  if (alarmaDesarmadaManual) {
+    alarmaDesarmadaManual = false;
+    Serial.println(F("[EVENTO] Alarma ARMADA manualmente"));
+    return PSTR("Alarma ARMADA");
+  }
+  alarmaDesarmadaManual = true;
+  setAlarmaSonando(false);
+  Serial.println(F("[EVENTO] Alarma DESARMADA manualmente"));
+  return PSTR("Alarma DESARMADA");
 }
 
 const char NM0[] PROGMEM = "Riego manana";
 const char NM1[] PROGMEM = "Riego tarde";
 const char NM2[] PROGMEM = "Cortinas";
-const char NM3[] PROGMEM = "Umbral de luz";
-const char NM4[] PROGMEM = "Ajustar hora";
-const char NM5[] PROGMEM = "Velocidad reloj";
-const char* const NOMBRES[] PROGMEM = { NM0, NM1, NM2, NM3, NM4, NM5 };
+const char NM3[] PROGMEM = "Alarma";
+const char NM4[] PROGMEM = "Umbral de luz";
+const char NM5[] PROGMEM = "Umbral de humedad";
+const char NM6[] PROGMEM = "Ajustar hora";
+const char NM7[] PROGMEM = "Velocidad reloj";
+const char* const NOMBRES[] PROGMEM = { NM0, NM1, NM2, NM3, NM4, NM5, NM6, NM7 };
 
 const char* nombreMenu(uint8_t i) {
   return (const char*)pgm_read_ptr(&NOMBRES[i]);
@@ -354,6 +400,10 @@ bool enVentana(uint8_t idx) {
 
 uint8_t leerLuzPct() {
   return map(analogRead(PIN_LDR), 0, 1023, 0, 100);
+}
+
+uint8_t leerHumedadPct() {
+  return map(analogRead(PIN_HUMEDAD), 0, 1023, 0, 100);
 }
 
 // Deja en refMin el fin de la ventana de riego activa o, si no hay, el próximo inicio
@@ -436,8 +486,14 @@ void actualizarCortina() {
 }
 
 // ---------- Lógica por módulo ----------
-void controlRiego() {
-  setBomba(enVentana(V_RIEGO_AM) || enVentana(V_RIEGO_PM));
+// El horario habilita la ventana de riego; dentro de ella, la humedad (con histéresis)
+// decide si realmente hace falta regar. Fuera de horario la bomba siempre está apagada.
+void controlRiego(uint8_t humedad) {
+  bool horarioRiego = enVentana(V_RIEGO_AM) || enVentana(V_RIEGO_PM);
+  if (!horarioRiego) setBomba(false);
+  else if (humedad < cfg.humMin) setBomba(true);
+  else if (humedad > cfg.humMax) setBomba(false);
+  // entre humMin y humMax se mantiene el estado actual (histéresis)
 }
 
 void controlLuz(uint8_t luz) {
@@ -458,15 +514,17 @@ void controlCortina() {
   }
 }
 
-void imprimirEstado(uint8_t luz) {
-  char buf[48];
-  snprintf(buf, sizeof(buf), "%02u:%02u:%02u | Luz %3u%% |", ahoraG.h, ahoraG.m, ahoraG.s, luz);
+void imprimirEstado(uint8_t luz, uint8_t humedad) {
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%02u:%02u:%02u | Luz %3u%% | Hum %3u%% |", ahoraG.h, ahoraG.m, ahoraG.s, luz, humedad);
   Serial.print(buf);
   Serial.print(F(" Riego:")); Serial.print(bombaOn ? F("ON") : F("OFF"));
   Serial.print(F(" Luces:")); Serial.print(lucesOn ? F("ON") : F("OFF"));
   Serial.print(modoLuz == 0 ? F("(auto)") : F("(manual)"));
   Serial.print(F(" Cortina:"));
-  Serial.println(cortinaMov == 1 ? F("ABRIENDO") : cortinaMov == 2 ? F("CERRANDO") : cortinaAbierta ? F("ABIERTA") : F("CERRADA"));
+  Serial.print(cortinaMov == 1 ? F("ABRIENDO") : cortinaMov == 2 ? F("CERRANDO") : cortinaAbierta ? F("ABIERTA") : F("CERRADA"));
+  Serial.print(F(" Alarma:"));
+  Serial.println(alarmaSonando ? F("SONANDO") : (alarmaArmadaPrev && !alarmaDesarmadaManual ? F("ARMADA") : F("DESARMADA")));
 }
 
 // ---------- Pantalla ----------
@@ -513,13 +571,14 @@ void dibujar() {
 
   switch (pantalla) {
     case P_INICIO: {
-      const char* cort = cortinaMov == 1 ? "ABRIENDO" : cortinaMov == 2 ? "CERRANDO" : cortinaAbierta ? "ABIERTA" : "CERRADA";
+      const char* cort = cortinaMov == 1 ? "ABRI" : cortinaMov == 2 ? "CIER" : cortinaAbierta ? "ABIE" : "CRDA";
+      const char* alCod = alarmaSonando ? "SON" : (alarmaArmadaPrev && !alarmaDesarmadaManual ? "ARM" : "OFF");
       calcularRefRiego();
       snprintf(f[0], 24, "CASA x%-3u   %02u:%02u:%02u", velocidad, ahoraG.h, ahoraG.m, ahoraG.s);
-      snprintf(f[1], 24, "Luz:%3u%% Luces:%-3s %c", luzG, lucesOn ? "ON" : "OFF", modoLuz == 0 ? 'A' : 'M');
-      snprintf(f[2], 24, "Cortina:%s", cort);
-      if (refMin == 0xFFFF) snprintf(f[3], 24, "Riego:%-3s --:--", bombaOn ? "ON" : "OFF");
-      else snprintf(f[3], 24, "Riego:%-3s %s %02u:%02u", bombaOn ? "ON" : "OFF", bombaOn ? "Fin " : "Prox", (uint8_t)(refMin / 60), (uint8_t)(refMin % 60));
+      snprintf(f[1], 24, "Luz:%3u%% %c Hum:%3u%%", luzG, modoLuz == 0 ? 'A' : 'M', humG);
+      snprintf(f[2], 24, "Luces:%-3s Cort:%-4s", lucesOn ? "ON" : "OFF", cort);
+      if (refMin == 0xFFFF) snprintf(f[3], 24, "R:%-3s --:-- Al:%-3s", bombaOn ? "ON" : "OFF", alCod);
+      else snprintf(f[3], 24, "R:%-3s %s%02u:%02u Al:%-3s", bombaOn ? "ON" : "OFF", bombaOn ? "F" : "P", (uint8_t)(refMin / 60), (uint8_t)(refMin % 60), alCod);
       break;
     }
 
@@ -535,8 +594,9 @@ void dibujar() {
     case P_VENTANA: {
       const Ventana& v = cfg.v[editIdx];
       const char* et;
-      if (editIdx == V_CORTINA) et = etapa == 0 ? PSTR("ABRIR") : PSTR("CERRAR");
-      else                      et = etapa == 0 ? PSTR("INICIO") : PSTR("FIN");
+      if (editIdx == V_CORTINA)      et = etapa == 0 ? PSTR("ABRIR") : PSTR("CERRAR");
+      else if (editIdx == V_ALARMA)  et = etapa == 0 ? PSTR("ARMA") : PSTR("DESARMA");
+      else                           et = etapa == 0 ? PSTR("INICIO") : PSTR("FIN");
       snprintf_P(f[0], 24, PSTR("%S %S"), nombreMenu(editIdx), et);
       snprintf_P(f[1], 24, PSTR("Actual: %02u:%02u"), etapa == 0 ? v.hIni : v.hFin, etapa == 0 ? v.mIni : v.mFin);
       campoHora(campo);
@@ -546,8 +606,13 @@ void dibujar() {
     }
 
     case P_UMBRAL:
-      snprintf_P(f[0], 24, etapa == 0 ? PSTR("Luz: ENCENDER bajo") : PSTR("Luz: APAGAR sobre"));
-      snprintf_P(f[1], 24, PSTR("Actual: %u%%"), etapa == 0 ? cfg.luzOn : cfg.luzOff);
+      if (tipoUmbral == 0) {
+        snprintf_P(f[0], 24, etapa == 0 ? PSTR("Luz: ENCENDER bajo") : PSTR("Luz: APAGAR sobre"));
+        snprintf_P(f[1], 24, PSTR("Actual: %u%%"), etapa == 0 ? cfg.luzOn : cfg.luzOff);
+      } else {
+        snprintf_P(f[0], 24, etapa == 0 ? PSTR("Hum: BOMBA ON bajo") : PSTR("Hum: BOMBA OFF sobre"));
+        snprintf_P(f[1], 24, PSTR("Actual: %u%%"), etapa == 0 ? cfg.humMin : cfg.humMax);
+      }
       snprintf_P(f[2], 24, PSTR("Nuevo:  %s%s"), entrada, entradaLen < 3 ? "_" : "");
       snprintf_P(f[3], 24, PSTR("OK=ok  ON/C=borrar"));
       break;
@@ -566,6 +631,18 @@ void dibujar() {
       snprintf_P(f[2], 24, PSTR("1=x1  2=x10  3=x60"));
       snprintf_P(f[3], 24, PSTR("4=x300  ON/C=atras"));
       break;
+
+    case P_CLAVE: {
+      snprintf_P(f[0], 24, PSTR("Clave de la alarma"));
+      char mask[5];
+      uint8_t i = 0;
+      for (; i < entradaLen; i++) mask[i] = '*';
+      for (; i < 4; i++) mask[i] = '_';
+      mask[4] = 0;
+      snprintf_P(f[1], 24, PSTR("%s"), mask);
+      snprintf_P(f[2], 24, PSTR("OK=ok  ON/C=borrar"));
+      break;
+    }
 
     case P_MSG:
       strcpy(f[1], msgL0);
@@ -597,6 +674,10 @@ void mostrarMsg(const char* l0, const char* l1, uint8_t sig) {
   redibujar = true;
 }
 
+void actualizarMensaje() {
+  if (pantalla == P_MSG && (long)(millis() - msgFin) >= 0) entrarPantalla(pantallaSig);
+}
+
 // ---------- Teclado ----------
 bool parseHora(uint8_t& h, uint8_t& m) {
   if (entradaLen != 4) return false;
@@ -612,6 +693,10 @@ void seleccionarMenu() {
     tmpV = cfg.v[editIdx];
     entrarPantalla(P_VENTANA);
   } else if (menuIdx == M_UMBRAL) {
+    tipoUmbral = 0;
+    entrarPantalla(P_UMBRAL);
+  } else if (menuIdx == M_HUMEDAD) {
+    tipoUmbral = 1;
     entrarPantalla(P_UMBRAL);
   } else if (menuIdx == M_HORA) {
     entrarPantalla(P_HORA);
@@ -648,21 +733,23 @@ void aceptarEntrada() {
     case P_UMBRAL: {
       if (entradaLen == 0) return;
       uint8_t valor = atoi(entrada);
+      uint8_t* pMin = tipoUmbral == 0 ? &cfg.luzOn : &cfg.humMin;
+      uint8_t* pMax = tipoUmbral == 0 ? &cfg.luzOff : &cfg.humMax;
       if (etapa == 0) {
         if (valor > 99) { mostrarMsg(PSTR("Valor invalido"), PSTR("0 a 99"), P_UMBRAL); return; }
-        tmpLuzOn = valor;
+        tmpUmbralMin = valor;
         etapa = 1;
         entrarPantalla(P_UMBRAL);
       } else {
-        if (valor <= tmpLuzOn || valor > 100) {
+        if (valor <= tmpUmbralMin || valor > 100) {
           mostrarMsg(PSTR("Apagar debe ser"), PSTR("mayor que encender"), P_UMBRAL);
           return;
         }
-        cfg.luzOn = tmpLuzOn;
-        cfg.luzOff = valor;
+        *pMin = tmpUmbralMin;
+        *pMax = valor;
         guardarConfig();
-        Serial.print(F("[PROG] Luz enciende/apaga: "));
-        Serial.print(cfg.luzOn); Serial.print('/'); Serial.println(cfg.luzOff);
+        Serial.print(tipoUmbral == 0 ? F("[PROG] Luz enciende/apaga: ") : F("[PROG] Humedad bomba on/off: "));
+        Serial.print(*pMin); Serial.print('/'); Serial.println(*pMax);
         mostrarMsg(PSTR("Guardado"), PSTR(""), P_MENU);
       }
       break;
@@ -674,9 +761,16 @@ void aceptarEntrada() {
         return;
       }
       ahoraG.h = h; ahoraG.m = m; ahoraG.s = 0;
-      rtcSetHora(h, m, 0);
-      Serial.println(F("[PROG] Hora del RTC ajustada"));
+      Serial.println(F("[PROG] Hora ajustada"));
       mostrarMsg(PSTR("Hora ajustada"), PSTR(""), P_INICIO);
+      break;
+
+    case P_CLAVE:
+      if (entradaLen == 4 && strcmp(entrada, CLAVE_ALARMA) == 0) {
+        mostrarMsg(alternarAlarmaManual(), PSTR(""), P_INICIO);
+      } else {
+        mostrarMsg(PSTR("Clave incorrecta"), PSTR(""), P_INICIO);
+      }
       break;
 
     default:
@@ -695,7 +789,7 @@ void teclaEntrada(char k) {
   } else if (k == 'X') {                    // ON/C: borra un dígito o vuelve atrás
     if (entradaLen > 0) entrada[--entradaLen] = 0;
     else if (etapa == 1) { etapa = 0; entrarPantalla(pantalla); }
-    else entrarPantalla(P_MENU);
+    else entrarPantalla(pantalla == P_CLAVE ? P_INICIO : P_MENU);
   } else if (k == 'K') {                    // OK
     aceptarEntrada();
   }
@@ -716,6 +810,7 @@ void procesarTecla(char k) {
       else if (k == '1') moverCortina(true);
       else if (k == '2') moverCortina(false);
       else if (k == '0') detenerCortina();
+      else if (k == '3') entrarPantalla(P_CLAVE);    // armar/desarmar alarma (pide clave)
       break;
 
     case P_MENU:
@@ -729,6 +824,7 @@ void procesarTecla(char k) {
     case P_VENTANA:
     case P_UMBRAL:
     case P_HORA:
+    case P_CLAVE:
       teclaEntrada(k);
       break;
 
@@ -745,11 +841,22 @@ void procesarTecla(char k) {
   }
 }
 
+void sondearTeclado() {
+  // El escaneo del teclado (Keypad::scanKeys) hace pinMode()/digitalWrite() por cada
+  // combinación de fila/columna; a 100 Hz es el mayor costo de CPU en Proteus. 33 Hz
+  // sigue siendo instantáneo para una pulsación humana.
+  if (++tickTeclado >= 3) {
+    tickTeclado = 0;
+    char k = teclado.getKey();
+    if (k && pantalla != P_MSG) procesarTecla(k);
+  }
+}
+
 // ---------- Arduino ----------
 void setup() {
   uint8_t causaReset = MCUSR;            // por qué se reinició el chip (se limpia para el próximo reinicio)
   MCUSR = 0;
-  Serial.begin(9600);
+  Serial.begin(115200);
 #if DEPURAR
   Serial.print(F("[DBG] setup: inicio, reinicio por:"));
   if (causaReset & _BV(PORF))  Serial.print(F(" ENCENDIDO"));
@@ -781,59 +888,51 @@ void setup() {
   }
   lcd = new LcdI2C(lcdDir, 20, 4);
   lcd->begin();
+  // 400 kHz en vez de los 100 kHz por defecto: cada caracter del LCD cuesta ~4 transacciones
+  // I2C (2 nibbles x pulso de E) y ese bus es el mayor costo de CPU que le queda a Proteus.
+  // lcd->begin() ya llamó a Wire.begin() (que resetea el reloj), por eso va después.
+  // Si el LCD falla o muestra basura en Proteus a esta velocidad, volver a 100000.
+  Wire.setClock(400000);
   lcd->backlight();
   Serial.print(F("LCD en 0x"));
   Serial.println(lcdDir, HEX);
   linea(1, "   Sistema Casa");
   linea(2, "   Iniciando...");
 
-  // Pantalla 16x2 de la hora del DS1307: primero LCD2_DIR; si no responde, cualquier otro
-  // expansor PCF8574/PCF8574A del bus (0x20-0x27 o 0x38-0x3F) distinto del de la 20x4
-  Wire.beginTransmission(LCD2_DIR);
-  if (LCD2_DIR != lcdDir && Wire.endTransmission() == 0) lcd2Dir = LCD2_DIR;
-  for (uint8_t d = 0x20; !lcd2Dir && d <= 0x3F; d++) {
-    if (d == lcdDir || (d > 0x27 && d < 0x38)) continue;
-    Wire.beginTransmission(d);
-    if (Wire.endTransmission() == 0) lcd2Dir = d;
+  // Expansor I2C de la alarma (buzzer + sensor de intrusión): opcional, 0x20 o 0x27
+  const uint8_t alarmaCandidatas[2] = { 0x20, 0x27 };
+  for (uint8_t i = 0; i < 2; i++) {
+    if (alarmaCandidatas[i] == lcdDir) continue;
+    Wire.beginTransmission(alarmaCandidatas[i]);
+    if (Wire.endTransmission() == 0) { alarmaDir = alarmaCandidatas[i]; break; }
   }
-  if (lcd2Dir) {
-#if LCD2_JHD
-    jhdInicio();
-#else
-    lcd2 = new LcdI2C(lcd2Dir, 16, 2);
-    lcd2->begin();
-    lcd2->backlight();
-#endif
-    lcd2Texto(0, "Hora del DS1307 ");
-    Serial.print(F("LCD 16x2 en 0x"));
-    Serial.println(lcd2Dir, HEX);
+  if (alarmaDir) {
+    alarmaExpWrite();                    // P1 (intrusión) en alto, buzzer apagado
+    Serial.print(F("Expansor de alarma en 0x"));
+    Serial.println(alarmaDir, HEX);
   } else {
-    Serial.println(F("LCD 16x2 no encontrado (opcional)"));
+    Serial.println(F("Expansor de alarma no encontrado (alarma deshabilitada)"));
   }
+
+  // Pantalla 16x2 con la hora del sistema: primero LCD2_DIR; si no responde, cualquier otro
+  // expansor PCF8574/PCF8574A del bus (0x20-0x27 o 0x38-0x3F) distinto del de la 20x4 y del
+  // expansor de la alarma
+  iniciarLcd2(lcdDir, alarmaDir);
 #if DEPURAR
   Serial.println(F("[DBG] setup: LCD listo"));
 #endif
 
   cargarConfig();
 
-  if (!rtcBegin()) {
-    Serial.println(F("ERROR: no se encontró el RTC DS1307"));
-    linea(1, "ERROR: sin RTC");
-    linea(2, "Revise I2C");
-    while (true) { }
-  }
-  // Si el RTC estaba detenido (o se pide una hora fija) arranca a HORA_ARRANQUE;
-  // después se corrige desde el teclado (F1)
-  if (FIJAR_HORA_AL_ARRANCAR || !rtcCorriendo()) {
-    rtcSetHora(HORA_ARRANQUE, MIN_ARRANQUE, 0);
-    Serial.println(F("Hora inicial fijada (F1 = ajustar hora)"));
-  }
-
-  rtcCargar();
-  mostrarRtc();
+  // Sin RTC: la hora del sistema se fija aquí en cada arranque (no hay batería que la
+  // conserve) y se corrige desde el teclado (F1)
+  ahoraG.h = HORA_ARRANQUE; ahoraG.m = MIN_ARRANQUE; ahoraG.s = 0;
+  Serial.println(F("Hora inicial fijada (F1 = ajustar hora)"));
+  actualizarLcd2();
   luzG = leerLuzPct();
+  humG = leerHumedadPct();
 #if DEPURAR
-  Serial.println(F("[DBG] setup: RTC y LDR leidos"));
+  Serial.println(F("[DBG] setup: hora, LDR y humedad listos"));
 #endif
 
   // Estado inicial: emite los eventos del primer ciclo
@@ -841,6 +940,7 @@ void setup() {
   lucesOn = !oscuro;
   setLuces(oscuro);
   cortinaVentPrev = !enVentana(V_CORTINA);
+  alarmaArmadaPrev = !enVentana(V_ALARMA);
 
   Serial.println(F("Sistema para Casa iniciado"));
   delay(300);                          // deja ver "Iniciando..." un instante
@@ -886,22 +986,12 @@ void loop() {
     Serial.println(dbg);
 #endif
     if (bombaOn || DEPURAR) mostrar7seg(riegoSeg);
-    segSync += n;
-    // Con el reloj acelerado el DS1307 se pone a la hora simulada cada segundo real, para
-    // que lo que lee la pantalla 16x2 coincida con el sistema
-    if (lcd2Dir && velocidad > 1) rtcEscribirTodo();
-    mostrarRtc();                        // pantalla 16x2: hora leída del DS1307 (no hace nada sin pantalla)
-    if (segSync >= 60) {                 // una vez por minuto real, sincronizar con el DS1307
-      segSync = 0;
-      if (velocidad == 1) rtcCargar();   // tiempo real: el DS1307 manda (corrige deriva)
-      else rtcEscribirTodo();            // acelerado: el DS1307 guarda la hora simulada
-    }
+    actualizarLcd2();                    // pantalla 16x2: hora del sistema (no hace nada sin pantalla)
   }
 
-  char k = teclado.getKey();
-  if (k && pantalla != P_MSG) procesarTecla(k);
+  sondearTeclado();
 
-  if (pantalla == P_MSG && (long)(millis() - msgFin) >= 0) entrarPantalla(pantallaSig);
+  actualizarMensaje();
 
   actualizarCortina();
 
@@ -909,14 +999,16 @@ void loop() {
     ultimoCiclo = millis();
 
     luzG = leerLuzPct();
+    humG = leerHumedadPct();
 
-    controlRiego();
+    controlRiego(humG);
     controlLuz(luzG);
     controlCortina();
+    controlAlarma();
 
     if (ahoraG.m != ultimoMinImpreso) {
       ultimoMinImpreso = ahoraG.m;
-      imprimirEstado(luzG);
+      imprimirEstado(luzG, humG);
     }
     if (pantalla == P_INICIO || pantalla == P_HORA) redibujar = true;
   }

@@ -4,13 +4,14 @@ Curso de Electrónica Digital, UMG.
 
 ## 1. ¿Qué hace el sistema?
 
-El sistema controla tres cosas de una casa y muestra todo en una pantalla:
+El sistema controla varias cosas de una casa y muestra todo en una pantalla:
 
 | Función | Qué hace |
 |---|---|
 | **Iluminación** | Mide la luz ambiente. Enciende las luces cuando hay poca luz y las apaga cuando hay mucha. También se pueden forzar manualmente. |
-| **Riego del jardín** | Enciende la bomba de riego en dos horarios al día: uno en la mañana y otro en la tarde. |
+| **Riego del jardín** | Enciende la bomba de riego en dos horarios al día (mañana y tarde), pero solo si además el suelo está seco (sensor de humedad). Si el suelo ya está húmedo, no riega aunque sea la hora. |
 | **Cortinas** | Un motor abre y cierra la cortina a una hora programada, o cuando el usuario lo pide con el teclado. |
+| **Alarma de seguridad** | Se arma sola en un horario (de noche, por defecto). Mientras está armada, un sensor de intrusión dispara un buzzer. Se puede armar o desarmar a mano con una clave. |
 
 Todo funciona según un **reloj de tiempo real**: los eventos ocurren a la hora configurada, sin intervención.
 
@@ -26,29 +27,29 @@ Todo funciona según un **reloj de tiempo real**: los eventos ocurren a la hora 
 ON/C  0    OK   F3
 ```
 
-- **Indicadores:** un LED o relé de riego, un LED de luces y el motor de la cortina.
+- **Indicadores:** un LED o relé de riego, un LED de luces, el motor de la cortina y un buzzer de alarma.
 
 ## 3. Pantalla de estado
 
 Es la pantalla que se ve normalmente:
 
 ```
-CASA x60   05:55:12
-Luz: 62% Luces:OFF A
-Cortina:CERRADA
-Riego:OFF Prox 06:00
+CASA x1     05:55:12
+Luz: 62% A Hum: 40%
+Luces:OFF Cort:CRDA
+R:OFF --:-- Al:ARM
 ```
 
 | Fila | Contenido |
 |---|---|
-| 1 | Velocidad del reloj (`x60`) y hora del día (`HH:MM:SS`, formato de 24 h) |
-| 2 | Nivel de luz en %, estado de las luces (`ON`/`OFF`) y modo: `A` = automático, `M` = manual |
-| 3 | Estado de la cortina: `ABIERTA`, `CERRADA`, `ABRIENDO` o `CERRANDO` |
-| 4 | Riego `ON`/`OFF`. Si está apagado, muestra la hora del **próximo** riego (`Prox`); si está regando, la hora en que **termina** (`Fin`). |
+| 1 | Velocidad del reloj (`x1`) y hora del día (`HH:MM:SS`, formato de 24 h) |
+| 2 | Nivel de luz en % y modo de luces (`A` = automático, `M` = manual); nivel de humedad del suelo en % |
+| 3 | Luces `ON`/`OFF`; estado de la cortina abreviado: `ABRI` (abriendo), `CIER` (cerrando), `ABIE` (abierta), `CRDA` (cerrada) |
+| 4 | Riego `ON`/`OFF` (si está apagado, hora del **próximo** riego con `P`; si está regando, hora en que **termina** con `F`); estado de la alarma abreviado: `ARM` (armada), `SON` (sonando), `OFF` (desarmada o fuera de horario) |
 
-### Pantalla 16x2: hora del reloj DS1307
+### Pantalla 16x2 (opcional): hora del sistema
 
-Una segunda pantalla pequeña muestra la hora **tal como la entrega el reloj DS1307** (`HH:MM:SS`), que se actualiza cada segundo. Sirve para comprobar que el reloj funciona y que coincide con la hora de la pantalla principal. Si la hora se ajusta con `F1`, esta pantalla también cambia.
+Si está conectada, una segunda pantalla pequeña muestra la hora del sistema (`HH:MM:SS`), que se actualiza cada segundo. Sirve para comprobarla de un vistazo sin tapar la pantalla principal. Si la hora se ajusta con `F1`, esta pantalla también cambia.
 
 ### Display de 7 segmentos: tiempo de riego
 
@@ -70,10 +71,13 @@ Además de la pantalla, un display de 4 dígitos muestra **cuánto tiempo lleva 
 | `1` | Abrir la cortina |
 | `2` | Cerrar la cortina |
 | `0` | Detener el motor de la cortina |
+| `3` | Armar o desarmar la alarma a mano (pide una clave) |
 
 **Luces:** en AUTO el sistema decide según la luz ambiente. En ON quedan encendidas y en OFF apagadas, sin importar la luz. La `M` en la pantalla indica que está en manual.
 
 **Cortina:** una orden manual (`1` o `2`) se respeta hasta el siguiente evento programado, que volverá a abrir o cerrar a su hora. El motor gira 4 segundos en cada movimiento.
+
+**Alarma:** al pulsar `3` se pide una clave de 4 dígitos (de fábrica `1234`). Si es correcta, se arma o desarma manualmente (solo tiene efecto dentro del horario de alarma; fuera de él aparece "Fuera de horario"). Desarmarla a mano dura hasta el siguiente cambio de horario (se vuelve a armar sola).
 
 ## 5. Menú de configuración
 
@@ -83,7 +87,7 @@ Se abre con `F0`. Muestra 4 opciones a la vez y se desplaza al bajar.
 >1 Riego manana
  2 Riego tarde
  3 Cortinas
- 4 Umbral de luz
+ 4 Alarma
 ```
 
 | Opción | Para qué sirve |
@@ -91,9 +95,11 @@ Se abre con `F0`. Muestra 4 opciones a la vez y se desplaza al bajar.
 | 1 Riego manana | Hora de inicio y de fin del riego de la mañana |
 | 2 Riego tarde | Hora de inicio y de fin del riego de la tarde |
 | 3 Cortinas | Hora de abrir y hora de cerrar la cortina |
-| 4 Umbral de luz | Porcentajes de luz para encender y apagar las luces |
-| 5 Ajustar hora | Poner el reloj en hora |
-| 6 Velocidad reloj | Acelerar el reloj para probar el sistema |
+| 4 Alarma | Hora en que se arma y hora en que se desarma (cruza la medianoche de fábrica) |
+| 5 Umbral de luz | Porcentajes de luz para encender y apagar las luces |
+| 6 Umbral de humedad | Porcentajes de humedad del suelo para encender y apagar la bomba |
+| 7 Ajustar hora | Poner el reloj en hora |
+| 8 Velocidad reloj | Acelerar el reloj para probar el sistema |
 
 **Moverse en el menú:**
 
@@ -101,7 +107,7 @@ Se abre con `F0`. Muestra 4 opciones a la vez y se desplaza al bajar.
 |---|---|
 | `F1` | Siguiente opción |
 | `F2` | Opción anterior |
-| `1` … `6` | Ir directamente a esa opción |
+| `1` … `8` | Ir directamente a esa opción |
 | `OK` | Entrar a la opción marcada con `>` |
 | `ON/C` o `F0` | Volver a la pantalla de estado |
 
@@ -109,16 +115,16 @@ Se abre con `F0`. Muestra 4 opciones a la vez y se desplaza al bajar.
 
 En todas las pantallas de entrada: se escriben los dígitos con el teclado numérico, `ON/C` borra el último dígito (o vuelve atrás si no hay nada escrito) y `OK` acepta. Los espacios sin escribir se ven como `_`.
 
-### 6.1 Horarios de riego y cortina
+### 6.1 Horarios de riego, cortina y alarma
 
-1. Entra al menú (`F0`) y elige la opción (1, 2 o 3).
+1. Entra al menú (`F0`) y elige la opción (1, 2, 3 o 4).
 2. Escribe la hora de **inicio** en formato `HHMM` de 24 horas (por ejemplo `0600` = 6:00 a. m., `1830` = 6:30 p. m.) y pulsa `OK`.
 3. Escribe la hora de **fin** y pulsa `OK`. Aparece "Guardado".
 
-Para las cortinas, el primer dato es la hora de **abrir** y el segundo la hora de **cerrar**.
+Para las cortinas, el primer dato es la hora de **abrir** y el segundo la hora de **cerrar**. Para la alarma, el primero es la hora en que se **arma** y el segundo la hora en que se **desarma**.
 
 Reglas:
-- Si la hora de fin es menor que la de inicio, el horario cruza la medianoche (por ejemplo 22:00 a 02:00).
+- Si la hora de fin es menor que la de inicio, el horario cruza la medianoche (por ejemplo 22:00 a 02:00). La alarma de fábrica es así: arma a las 23:00, desarma a las 06:00.
 - Si inicio y fin son iguales, ese horario queda **desactivado**.
 - Si la hora no es válida (por ejemplo `2575`), aparece "Hora invalida" y se vuelve a pedir.
 
@@ -129,26 +135,33 @@ Valores de fábrica:
 | Riego de la mañana | 06:00 – 06:30 |
 | Riego de la tarde | 18:00 – 18:30 |
 | Cortina | Abre 07:00, cierra 19:00 |
+| Alarma | Arma 23:00, desarma 06:00 |
 
-### 6.2 Umbral de luz
+Recuerda que el riego, además del horario, necesita que el suelo esté seco (sección 6.2); el horario por sí solo no riega si el sensor marca que ya está húmedo.
 
-1. Menú → opción 4.
-2. Escribe el porcentaje **debajo** del cual se **encienden** las luces (0 a 99) y pulsa `OK`.
-3. Escribe el porcentaje **encima** del cual se **apagan** (mayor que el anterior, hasta 100) y pulsa `OK`.
+### 6.2 Umbral de luz y de humedad
 
-De fábrica: se encienden por debajo de 30 % y se apagan por encima de 45 %. Entre los dos valores las luces mantienen su estado, para que no parpadeen.
+1. Menú → opción 5 (luz) o 6 (humedad).
+2. Escribe el porcentaje **debajo** del cual se **enciende** (luces o bomba, 0 a 99) y pulsa `OK`.
+3. Escribe el porcentaje **encima** del cual se **apaga** (mayor que el anterior, hasta 100) y pulsa `OK`.
+
+De fábrica:
+- Luz: se encienden por debajo de 30 % y se apagan por encima de 45 %.
+- Humedad: la bomba enciende por debajo de 35 % (seco) y apaga por encima de 60 % (húmedo).
+
+Entre los dos valores el estado se mantiene (histéresis), para que no estén prendiendo y apagando todo el tiempo.
 
 ### 6.3 Ajustar la hora
 
-1. Pulsa `F1` en la pantalla de estado (o menú → opción 5).
+1. Pulsa `F1` en la pantalla de estado (o menú → opción 7).
 2. La pantalla muestra la hora actual con segundos.
 3. Escribe la hora nueva como `HHMM` y pulsa `OK`. Los segundos empiezan en cero.
 
-El sistema solo usa la **hora del día** (24 h): no hay fecha. El reloj cuenta hasta `23:59:59` y vuelve a `00:00:00`, y los eventos se repiten todos los días a su hora programada.
+El sistema solo usa la **hora del día** (24 h): no hay fecha ni RTC con batería, así que la hora se fija a 05:55 cada vez que arranca el sistema y hay que reprogramarla con `F1` si se necesita otra. El reloj cuenta hasta `23:59:59` y vuelve a `00:00:00`, y los eventos se repiten todos los días a su hora programada.
 
 ### 6.4 Velocidad del reloj (demostraciones)
 
-Pulsa `F2` (o menú → opción 6) y elige:
+Pulsa `F2` (o menú → opción 8) y elige:
 
 | Tecla | Velocidad | Significado |
 |---|---|---|
@@ -157,9 +170,9 @@ Pulsa `F2` (o menú → opción 6) y elige:
 | `3` | x60 | 1 segundo real = 1 minuto del reloj |
 | `4` | x300 | 1 segundo real = 5 minutos del reloj |
 
-Al arrancar, el sistema usa **x60**. Para uso normal elige **x1**.
+Al arrancar, el sistema usa **x1** (tiempo real). Para probar varios eventos rápido en Proteus, cambia a x60 o x300.
 
-Los horarios de riego y cortina y los umbrales de luz **se guardan en memoria** y se conservan al apagar el sistema. La hora la mantiene el reloj DS1307. La velocidad del reloj vuelve a x60 al reiniciar.
+Los horarios, los umbrales y la clave de la alarma **se guardan en memoria** y se conservan al apagar el sistema (la clave es fija en el programa, no se edita desde el teclado). La hora y la velocidad del reloj **no** se conservan: vuelven a 05:55 y x1 al reiniciar.
 
 ## 7. Mensajes de la pantalla
 
@@ -169,14 +182,20 @@ Los horarios de riego y cortina y los umbrales de luz **se guardan en memoria** 
 | `Hora invalida – Use HHMM (24h)` | La hora escrita no existe | Escribirla de nuevo |
 | `Valor invalido – 0 a 99` | Porcentaje fuera de rango | Escribirlo de nuevo |
 | `Apagar debe ser mayor que encender` | Los umbrales están al revés | Poner un valor de apagado más alto |
-| `ERROR: sin RTC – Revise I2C` | No se detecta el reloj | Revisar la conexión del reloj DS1307 |
+| `Clave incorrecta` | La clave de la alarma no coincide | Volver a intentar con `3` |
+| `Fuera de horario` | Se intentó armar/desarmar la alarma fuera de su ventana horaria | Esperar a que entre en horario, o ajustarlo en el menú (opción 4) |
+| `Alarma ARMADA` / `Alarma DESARMADA` | Confirmación tras escribir la clave correcta | Nada |
 
 ## 8. Preguntas frecuentes
 
 **Las luces no cambian aunque cambie la luz.** Revisa si están en modo manual (`M` en la fila 2). Pulsa `F3` hasta que aparezca `A`.
 
-**El riego o la cortina no se activan a la hora esperada.** Comprueba la hora del reloj (`F1`) y que el horario no tenga inicio igual a fin. Con la velocidad en x1 el cambio puede tardar horas; usa x60 para probar.
+**El riego no se activa aunque sea su horario.** Revisa el nivel de humedad en la pantalla (fila 2): si ya está por encima del umbral de apagado, el sistema no riega porque el suelo no lo necesita. Baja el potenciómetro de humedad para simular suelo seco.
 
-**Al reiniciar vuelve a la hora de las 05:55.** Es el comportamiento de demostración. Un técnico puede desactivarlo (ver el manual técnico, sección 7).
+**El riego, la cortina o la alarma no se activan a la hora esperada.** Comprueba la hora del reloj (`F1`) y que el horario no tenga inicio igual a fin. Con la velocidad en x1 el cambio puede tardar horas; usa x60 o x300 para probar.
+
+**Al reiniciar vuelve a la hora de las 05:55.** Es normal: no hay RTC con batería, así que la hora se fija sola en cada arranque. Ajústala con `F1`.
 
 **La pantalla se ve encendida pero sin texto.** Es un problema de conexión del LCD, no de uso. Consulta `PROTEUS.md`, sección "Solución de problemas".
+
+**La alarma no suena al presionar el botón de intrusión.** Comprueba que esté dentro del horario de alarma (fila 4, `Al:ARM`) y que no se haya desarmado a mano con `3`.
