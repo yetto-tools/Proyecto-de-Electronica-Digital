@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 1000" width="1320" height="1000" font-family="Consolas, 'Courier New', monospace">
+  <defs>
+    <pattern id="grid" width="22" height="22" patternUnits="userSpaceOnUse">
+      <path d="M 22 0 L 0 0 0 22" fill="none" stroke="#e7dfc6" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect x="0" y="0" width="1320" height="1000" fill="#f5f0de"/>
+  <rect x="0" y="0" width="1320" height="1000" fill="url(#grid)"/>
+
+  <text x="24" y="30" font-size="20" font-weight="bold" fill="#7a1f1f">Sistema para Casa — Diagrama de conexion (actualizado)</text>
+  <text x="24" y="50" font-size="13" fill="#555">Sin DS1307 (reloj 100% en software, Timer1). Nuevo: potenciometro de humedad (A6) y expansor PCF8574/PCF8574A de alarma (buzzer + sensor de intrusion).</text>
+
+  <!-- ===================== BUS RAILS (recorren todo el ancho util) ===================== -->
+  <line x1="20" y1="270" x2="1180" y2="270" stroke="#2563eb" stroke-width="2.5"/>
+  <text x="24" y="263" font-size="12" font-weight="bold" fill="#2563eb">BUS I2C — SDA (Nano A4)</text>
+
+  <line x1="20" y1="286" x2="1180" y2="286" stroke="#7c3aed" stroke-width="2.5"/>
+  <text x="24" y="300" font-size="12" font-weight="bold" fill="#7c3aed">BUS I2C — SCL (Nano A5)</text>
+
+  <line x1="20" y1="935" x2="1300" y2="935" stroke="#c0392b" stroke-width="3"/>
+  <text x="1230" y="928" font-size="13" font-weight="bold" fill="#c0392b">+5V</text>
+
+  <line x1="20" y1="962" x2="1300" y2="962" stroke="#1a1a1a" stroke-width="3"/>
+  <text x="1230" y="980" font-size="13" font-weight="bold" fill="#1a1a1a">GND</text>
+
+  <!-- ===================== ARDUINO NANO ===================== -->
+  <rect x="20" y="70" width="560" height="190" rx="4" fill="#ece4cf" stroke="#7a1f1f" stroke-width="2"/>
+  <text x="300" y="92" font-size="15" font-weight="bold" fill="#7a1f1f" text-anchor="middle">Arduino Nano v3 (ATmega328P)</text>
+  <text x="34" y="112" font-size="12">D0/RX1 — libre</text>
+  <text x="34" y="128" font-size="12">D1/TX1 — Term. RXD</text>
+  <text x="34" y="144" font-size="12">D2 — Keypad fila 1</text>
+  <text x="34" y="160" font-size="12">D3 — 595 SER (7seg)</text>
+  <text x="34" y="176" font-size="12">D4 — Keypad fila 2</text>
+  <text x="34" y="192" font-size="12">D5 — Keypad fila 3</text>
+  <text x="34" y="208" font-size="12">D6 — Keypad fila 4</text>
+  <text x="34" y="224" font-size="12">D7 — Riego (LED)</text>
+  <text x="34" y="240" font-size="12">D8 — Luces (LED)</text>
+
+  <text x="270" y="112" font-size="12">D9 — L293D IN1</text>
+  <text x="270" y="128" font-size="12">D10 — L293D IN2</text>
+  <text x="270" y="144" font-size="12">D11 — Keypad C1</text>
+  <text x="270" y="160" font-size="12">D12 — Keypad C2</text>
+  <text x="270" y="176" font-size="12">D13 — 595 RCLK</text>
+  <text x="270" y="192" font-size="12">A0 — LDR luz</text>
+  <text x="270" y="208" font-size="12">A1 — Keypad C4</text>
+  <text x="270" y="224" font-size="12">A2 — Keypad C3</text>
+  <text x="270" y="240" font-size="12">A3 — 595 SRCLK</text>
+
+  <text x="430" y="112" font-size="12">A4/SDA — bus I2C</text>
+  <text x="430" y="128" font-size="12">A5/SCL — bus I2C</text>
+  <text x="430" y="144" font-size="12" font-weight="bold" fill="#157a3a">A6 — Humedad (NUEVO)</text>
+  <text x="430" y="160" font-size="12">A7 — libre</text>
+  <text x="430" y="176" font-size="12">5V — rail +5V</text>
+  <text x="430" y="192" font-size="12">GND — rail GND</text>
+
+  <line x1="500" y1="108" x2="500" y2="270" stroke="#2563eb" stroke-width="2"/>
+  <line x1="510" y1="124" x2="510" y2="286" stroke="#7c3aed" stroke-width="2"/>
+  <line x1="540" y1="172" x2="540" y2="935" stroke="#c0392b" stroke-width="1.5"/>
+  <line x1="550" y1="188" x2="550" y2="962" stroke="#1a1a1a" stroke-width="1.5"/>
+
+  <!-- ===================== LCD1 + U2 PCF8574A ===================== -->
+  <rect x="610" y="70" width="280" height="150" rx="4" fill="#ece4cf" stroke="#7a1f1f" stroke-width="2"/>
+  <text x="750" y="92" font-size="14" font-weight="bold" fill="#7a1f1f" text-anchor="middle">LCD1 — LM044L (20x4)</text>
+  <text x="622" y="114" font-size="12">RS,RW,E → P0,P1,P2 (U2)</text>
+  <text x="622" y="130" font-size="12">D4..D7 → P4..P7 (U2)</text>
+  <text x="622" y="146" font-size="12">VSS→GND VDD→+5V VEE→GND</text>
+  <text x="622" y="168" font-size="12" font-style="italic">(D0..D3 sin usar, sin backlight P3)</text>
+
+  <rect x="920" y="70" width="190" height="150" rx="4" fill="#ece4cf" stroke="#7a1f1f" stroke-width="2"/>
+  <text x="1015" y="92" font-size="14" font-weight="bold" fill="#7a1f1f" text-anchor="middle">U2 — PCF8574A</text>
+  <text x="932" y="112" font-size="12">Addr: A0-A2→GND (0x38)</text>
+  <text x="932" y="128" font-size="12">P0..P7 → LCD1 (arriba)</text>
+  <text x="932" y="144" font-size="12">SDA/SCL → bus I2C</text>
+  <text x="932" y="160" font-size="12">VCC→+5V GND→GND</text>
+  <line x1="1000" y1="160" x2="1000" y2="286" stroke="#7c3aed" stroke-width="2"/>
+  <line x1="1010" y1="144" x2="1010" y2="270" stroke="#2563eb" stroke-width="2"/>
+  <line x1="950" y1="176" x2="950" y2="935" stroke="#c0392b" stroke-width="1.5"/>
+  <line x1="960" y1="192" x2="960" y2="962" stroke="#1a1a1a" stroke-width="1.5"/>
+
+  <!-- ===================== LCD2 (opcional) ===================== -->
+  <rect x="20" y="320" width="240" height="110" rx="4" fill="#ece4cf" stroke="#7a1f1f" stroke-width="2"/>
+  <text x="140" y="340" font-size="13" font-weight="bold" fill="#7a1f1f" text-anchor="middle">LCD2 — JHD-2X16-I2C (opcional)</text>
+  <text x="32" y="360" font-size="12">Muestra la hora del sistema</text>
+  <text x="32" y="376" font-size="12">Addr 0x3E ($7C en debugger)</text>
+  <text x="32" y="392" font-size="12">VDD→+5V VSS→GND</text>
+  <text x="32" y="408" font-size="12">SCL/SDA → bus I2C</text>
+  <line x1="150" y1="408" x2="150" y2="935" stroke="#c0392b" stroke-width="1.5"/>
+  <line x1="160" y1="392" x2="160" y2="962" stroke="#1a1a1a" stroke-width="1.5"/>
+  <line x1="200" y1="376" x2="200" y2="286" stroke="#7c3aed" stroke-width="2"/>
+  <line x1="210" y1="360" x2="210" y2="270" stroke="#2563eb" stroke-width="2"/>
+
+  <!-- ===================== POTENCIOMETRO HUMEDAD (NUEVO) ===================== -->
+  <rect x="300" y="320" width="210" height="110" rx="4" fill="#def2e1" stroke="#157a3a" stroke-width="2.5"/>
+  <text x="405" y="340" font-size="13" font-weight="bold" fill="#157a3a" text-anchor="middle">POT — Humedad del suelo</text>
+  <text x="312" y="358" font-size="11" font-weight="bold" fill="#157a3a">NUEVO (reemplaza al DS1307)</text>
+  <text x="312" y="376" font-size="12">Terminal 1 → +5V</text>
+  <text x="312" y="392" font-size="12">Cursor (wiper) → Nano A6</text>
+  <text x="312" y="408" font-size="12">Terminal 2 → GND</text>
+  <line x1="470" y1="408" x2="470" y2="935" stroke="#c0392b" stroke-width="1.5"/>
+  <line x1="480" y1="392" x2="480" y2="962" stroke="#1a1a1a" stroke-width="1.5"/>
+  <polyline points="440,376 500,376 500,235 540,235" fill="none" stroke="#0b6e2e" stroke-width="2"/>
+  <text x="446" y="372" font-size="10" fill="#0b6e2e">a Nano A6</text>
+
+  <!-- ===================== ALARMA: PCF8574 + BUZZER + SENSOR (NUEVO) ===================== -->
+  <rect x="550" y="320" width="230" height="170" rx="4" fill="#def2e1" stroke="#157a3a" stroke-width="2.5"/>
+  <text x="665" y="340" font-size="13" font-weight="bold" fill="#157a3a" text-anchor="middle">U3 — PCF8574/PCF8574A (alarma)</text>
+  <text x="562" y="358" font-size="11" font-weight="bold" fill="#157a3a">NUEVO</text>
+  <text x="562" y="374" font-size="12">Addr: A0-A2→GND (0x20/0x27)</text>
+  <text x="562" y="390" font-size="12">P0 → Buzzer</text>
+  <text x="562" y="406" font-size="12">P1 → Sensor intrusion (BAJO)</text>
+  <text x="562" y="422" font-size="12">SDA/SCL → bus I2C</text>
+  <text x="562" y="438" font-size="12">VCC→+5V GND→GND</text>
+  <text x="562" y="456" font-size="10" font-style="italic">Si no responde: alarma deshabilitada</text>
+  <line x1="720" y1="456" x2="720" y2="935" stroke="#c0392b" stroke-width="1.5"/>
+  <line x1="730" y1="438" x2="730" y2="962" stroke="#1a1a1a" stroke-width="1.5"/>
+  <line x1="650" y1="422" x2="650" y2="286" stroke="#7c3aed" stroke-width="2"/>
+  <line x1="660" y1="406" x2="660" y2="270" stroke="#2563eb" stroke-width="2"/>
+
+  <rect x="810" y="320" width="140" height="70" rx="4" fill="#ece4cf" stroke="#7a1f1f" stroke-width="2"/>
+  <text x="880" y="342" font-size="12" font-weight="bold" fill="#7a1f1f" text-anchor="middle">Buzzer</text>
+  <text x="820" y="362" font-size="11">+ → P0 (U3)</text>
+  <text x="820" y="378" font-size="11">− → GND</text>
+  <line x1="815" y1="350" x2="780" y2="350" stroke="#0b6e2e" stroke-width="2"/>
+  <line x1="840" y1="375" x2="840" y2="962" stroke="#1a1a1a" stroke-width="1.5"/>
+
+  <rect x="810" y="410" width="200" height="80" rx="4" fill="#ece4cf" stroke="#7a1f1f" stroke-width="2"/>
+  <text x="910" y="432" font-size="12" font-weight="bold" fill="#7a1f1f" text-anchor="middle">Sensor de intrusion</text>
+  <text x="820" y="450" font-size="11">(boton / PIR, a GND)</text>
+  <text x="820" y="466" font-size="11">Terminal A → P1 (U3)</text>
+  <text x="820" y="482" font-size="11">Terminal B → GND</text>
+  <line x1="815" y1="450" x2="780" y2="425" stroke="#0b6e2e" stroke-width="2"/>
+  <line x1="870" y1="480" x2="870" y2="962" stroke="#1a1a1a" stroke-width="1.5"/>
+
+  <!-- ===================== KEYPAD ===================== -->
+  <rect x="1040" y="320" width="260" height="230" rx="4" fill="#ece4cf" stroke="#7a1f1f" stroke-width="2"/>
+  <text x="1170" y="340" font-size="13" font-weight="bold" fill="#7a1f1f" text-anchor="middle">Keypad 4x4</text>
+  <text x="1052" y="360" font-size="11">Fila1(1,2,3,F0)→Nano D2</text>
+  <text x="1052" y="376" font-size="11">Fila2(4,5,6,F1)→Nano D4</text>
+  <text x="1052" y="392" font-size="11">Fila3(7,8,9,F2)→Nano D5</text>
+  <text x="1052" y="408" font-size="11">Fila4(ON/C,0,ok,F3)→D6</text>
+  <text x="1052" y="428" font-size="11">Col1(1,4,7,ON/C)→D11</text>
+  <text x="1052" y="444" font-size="11">Col2(2,5,8,0)→D12</text>
+  <text x="1052" y="460" font-size="11">Col3(3,6,9,ok)→A2</text>
+  <text x="1052" y="476" font-size="11">Col4(F0,F1,F2,F3)→A1</text>
+  <text x="1052" y="496" font-size="10" font-style="italic">Sin resistencias (pull-up interno)</text>
+  <text x="1052" y="514" font-size="9" fill="#555">Conexiones directas al bloque Nano</text>
+  <text x="1052" y="528" font-size="9" fill="#555">(arriba-izquierda), ver nombres de pin.</text>
+
+  <!-- ===================== LDR + luz ambiente ===================== -->
+  <rect x="20" y="580" width="220" height="130" rx="4" fill="#ece4cf" stroke="#7a1f1f" stroke-width="2"/>
+  <text x="130" y="602" font-size="13" font-weight="bold" fill="#7a1f1f" text-anchor="middle">LDR1 + R5 — Luz ambiente</text>
+  <text x="32" y="622" font-size="12">+5V → LDR → nodo A0</text>
+  <text x="32" y="638" font-size="12">nodo A0 → R5 (10k) → GND</text>
+  <text x="32" y="654" font-size="12">nodo A0 → Nano A0</text>
+  <line x1="200" y1="654" x2="200" y2="935" stroke="#c0392b" stroke-width="1.5"/>
+  <line x1="210" y1="638" x2="210" y2="962" stroke="#1a1a1a" stroke-width="1.5"/>
+
+  <!-- ===================== Riego / Luces LED indicadores ===================== -->
+  <rect x="270" y="580" width="210" height="100" rx="4" fill="#ece4cf" stroke="#7a1f1f" stroke-width="2"/>
+  <text x="375" y="602" font-size="13" font-weight="bold" fill="#7a1f1f" text-anchor="middle">D3/R10 — Riego (indicador)</text>
+  <text x="282" y="622" font-size="12">Nano D7→R10(220)→anodo D3</text>
+  <text x="282" y="638" font-size="12">catodo D3 → GND</text>
+  <line x1="420" y1="638" x2="420" y2="962" stroke="#1a1a1a" stroke-width="1.5"/>
+
+  <rect x="510" y="580" width="210" height="100" rx="4" fill="#ece4cf" stroke="#7a1f1f" stroke-width="2"/>
+  <text x="615" y="602" font-size="13" font-weight="bold" fill="#7a1f1f" text-anchor="middle">LED — Luces (indicador)</text>
+  <text x="522" y="622" font-size="12">Nano D8→R(220)→anodo LED</text>
+  <text x="522" y="638" font-size="12">catodo LED → GND</text>
+  <line x1="660" y1="638" x2="660" y2="962" stroke="#1a1a1a" stroke-width="1.5"/>
+
+  <!-- ===================== MOTOR / L293D ===================== -->
+  <rect x="20" y="730" width="440" height="190" rx="4" fill="#ece4cf" stroke="#7a1f1f" stroke-width="2"/>
+  <text x="240" y="752" font-size="14" font-weight="bold" fill="#7a1f1f" text-anchor="middle">U4 — L293D + Motor de cortina</text>
+  <text x="32" y="772" font-size="12">EN1(1)→+5V (habilita canal 1)</text>
+  <text x="32" y="788" font-size="12">IN1(2)→Nano D9  IN2(7)→Nano D10</text>
+  <text x="32" y="804" font-size="12">OUT1(3)/OUT2(6) → Motor cortina</text>
+  <text x="32" y="820" font-size="12">VSS(16)→+5V (logica)  VS(8)→+12V</text>
+  <text x="32" y="836" font-size="12">GND(4,5,12,13) → GND</text>
+  <text x="32" y="852" font-size="11" font-style="italic">Abrir:D9=1,D10=0 · Cerrar:D9=0,D10=1</text>
+  <text x="32" y="868" font-size="11" font-style="italic">2do motor opc.: OUT3/4,IN3→D9,IN4→D10,EN2→+5V</text>
+  <line x1="300" y1="868" x2="300" y2="935" stroke="#c0392b" stroke-width="1.5"/>
+  <line x1="310" y1="852" x2="310" y2="962" stroke="#1a1a1a" stroke-width="1.5"/>
+
+  <!-- ===================== DISPLAY 7 SEGMENTOS ===================== -->
+  <rect x="490" y="730" width="520" height="190" rx="4" fill="#ece4cf" stroke="#7a1f1f" stroke-width="2"/>
+  <text x="750" y="752" font-size="14" font-weight="bold" fill="#7a1f1f" text-anchor="middle">Display 7 segmentos — tiempo de riego MM:SS</text>
+  <text x="502" y="772" font-size="12">4x 74HC595 en cadena + 4x 7SEG-COM-CATHODE (estatico)</text>
+  <text x="502" y="788" font-size="12">Nano D3 → SER del 595 #1 (decenas de minuto)</text>
+  <text x="502" y="804" font-size="12">Nano A3 → SRCLK de los 4 595 (en paralelo)</text>
+  <text x="502" y="820" font-size="12">Nano D13 → RCLK de los 4 595 (en paralelo)</text>
+  <text x="502" y="836" font-size="12">Cadena: 595#1 QH' → 595#2 SER → 595#3 → 595#4</text>
+  <text x="502" y="852" font-size="12">QA..QG de cada 595 → segmentos a..g (330 ohm c/u). Catodo comun → GND</text>
+  <text x="502" y="868" font-size="11" font-style="italic">D13 comparte el LED "LED &amp; Reset" del Nano: parpadea con el latch (normal)</text>
+  <line x1="900" y1="868" x2="900" y2="935" stroke="#c0392b" stroke-width="1.5"/>
+  <line x1="910" y1="852" x2="910" y2="962" stroke="#1a1a1a" stroke-width="1.5"/>
+
+  <text x="24" y="985" font-size="11" fill="#777">Diagrama de referencia hecho a mano (SVG), no es una captura literal de Proteus. Ver README.md / PROTEUS.md para el detalle pin a pin completo.</text>
+</svg>

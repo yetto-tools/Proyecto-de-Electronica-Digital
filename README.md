@@ -121,18 +121,33 @@ Abrir = D9 en alto y D10 en bajo; cerrar = D9 en bajo y D10 en alto; detenido = 
 
 **Segundo motor (opcional):** el sketch solo maneja el canal 1 (OUT1/OUT2). Si se dibuja un segundo motor en OUT3 (pin 11) y OUT4 (pin 14), para que gire junto con el primero: IN3 (pin 10) a D9, IN4 (pin 15) a D10 y EN2 (pin 9) a +5 V.
 
-### DS1307
+### Potenciómetro de humedad del suelo
+
+| De | A |
+|---|---|
+| +5 V | Potenciómetro terminal 1 (fijo) |
+| Potenciómetro terminal 2 (cursor / wiper) | Nano A6 |
+| GND | Potenciómetro terminal 3 (fijo) |
+
+Mismo principio que el LDR: un divisor resistivo que entrega 0–5 V proporcional a la posición del cursor. `controlRiego()` lo trata con histéresis (`humMin`/`humMax`, editables en el menú).
+
+### Expansor de la alarma (PCF8574 / PCF8574A)
+
+Segundo expansor I2C, independiente del que usa el LCD (direcciones distintas: `0x20` u `0x27` si es `PCF8574`, cualquiera libre entre `0x38`–`0x3F` si es `PCF8574A`). Se detecta igual que el del LCD (prueba de direcciones al arrancar) y se excluye su dirección de la búsqueda del LCD 16x2 opcional.
 
 | Pin | Nombre | Se conecta a |
 |---|---|---|
-| 1 | X1 | Cristal 32.768 kHz |
-| 2 | X2 | Cristal 32.768 kHz |
-| 3 | VBAT | Pila 3 V |
-| 4 | GND | GND |
-| 5 | SDA | Nano A4 |
-| 6 | SCL | Nano A5 |
-| 7 | SQW (`SOUT`) | Sin conectar (no a +5 V directo: es salida de colector abierto y puede dar contención; si se usa, pull-up de 10 kΩ) |
-| 8 | VCC | +5 V |
+| 1, 2, 3 | A0, A1, A2 | GND (o la combinación que fije la dirección elegida) |
+| 4 | P0 | Buzzer (salida) |
+| 5 | P1 | Sensor de intrusión (botón o PIR) → GND. **Activo en BAJO**: el firmware deja el pin en alto por el pull-up interno del PCF8574 (~100 µA); el botón/PIR a GND dispara la alarma. |
+| 6–12 | P2–P7 | Sin conectar |
+| 8 | GND | GND |
+| 13 | INT | Sin conectar |
+| 14 | SCL | Nano A5 |
+| 15 | SDA | Nano A4 |
+| 16 | VCC | +5 V |
+
+Si este expansor no responde al arrancar, la alarma queda deshabilitada (igual de "opcional" que el LCD 16x2): no es un error, el sistema sigue funcionando sin ella.
 
 ### PCF8574A
 

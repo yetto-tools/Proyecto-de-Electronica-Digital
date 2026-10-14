@@ -19,7 +19,7 @@ Requisito central: demostrar el uso de **reloj, eventos y acciones según el tie
 
 Entregables: implementación con **Arduino**, simulación/virtualización en **Proteus** y el **código** fuente.
 
-**Prioridad máxima (según el usuario): todo debe funcionar en la simulación de Proteus, versión 8.13 (Proteus Professional / ISIS).** Cualquier cambio al sketch o al circuito debe seguir siendo simulable allí (componentes disponibles en Proteus, p. ej. DS1307 y no DS3231).
+**Prioridad máxima (según el usuario): todo debe funcionar en la simulación de Proteus, versión 8.13 (Proteus Professional / ISIS).** Cualquier cambio al sketch o al circuito debe seguir siendo simulable allí (usar solo componentes disponibles en la librería de Proteus).
 
 ## Estructura
 
@@ -28,7 +28,7 @@ Entregables: implementación con **Arduino**, simulación/virtualización en **P
 - `PROTEUS.md` — componentes, cableado, uso del teclado, guion de demostración y solución de problemas en Proteus.
 - `README.md` — descripción general del proyecto para quien lo revise.
 - `MEMORY.md` — decisiones tomadas, problemas ya resueltos y pendientes. **Leerlo antes de tocar el circuito, el LCD o la compilación.**
-- `diagrama_conexion.svg` / `.png` — diagrama pictórico de conexión. Se genera con un script de Python (no está en el repo); si cambian pines o componentes, hay que actualizar también este diagrama y la tabla de `PROTEUS.md`.
+- `diagrama_conexion.svg` / `.png` — diagrama pictórico de conexión, hecho a mano en SVG (no es una captura de Proteus) y exportado a PNG con un navegador headless (`msedge --headless --screenshot=...`). Si cambian pines o componentes, hay que actualizar el `.svg`, regenerar el `.png` y actualizar la tabla de `PROTEUS.md`.
 - `build\` — salida de compilación; `build\sistema_casa.ino.hex` es lo que se carga en el Arduino de Proteus.
 
 ## Restricciones de compilación (VSM Studio de Proteus, Arduino IDE 1.8.5)
@@ -44,15 +44,17 @@ Entregables: implementación con **Arduino**, simulación/virtualización en **P
 ## Diseño del sketch
 
 - Los horarios y umbrales viven en la struct `Config` (valores por defecto en `CONFIG_DEFECTO`) y se editan desde el teclado/LCD (máquina de estados `Pantalla`); se persisten en EEPROM. Si cambia `Config` o sus defaults, subir `CONFIG_MAGIC`.
-- El LCD es **20x4 (`LM044L` en Proteus)** por I2C con **`PCF8574A`, A0–A2 a GND → dirección 0x38**. Se usa I2C porque el Nano no tiene pines para LCD paralelo + teclado 4x4 + salidas. El DS1307 (0x68) comparte el bus.
+- El LCD es **20x4 (`LM044L` en Proteus)** por I2C con **`PCF8574A`, A0–A2 a GND → dirección 0x38**. Se usa I2C porque el Nano no tiene pines para LCD paralelo + teclado 4x4 + salidas. El expansor de la alarma (`PCF8574`/`PCF8574A`, 0x20 u 0x27) y el LCD 16x2 opcional (0x3E) comparten el mismo bus.
 - Mapeo del expansor: P0=RS, P1=RW, P2=E, P3=backlight, P4–P7=D4–D7. Es el mismo que asume `LcdI2C`.
 - En el 20x4 las filas empiezan en DDRAM 0x00, 0x40, 0x14, 0x54 (no son consecutivas); `LcdI2C::setCursor` ya lo resuelve.
 - El loop no bloquea: duerme en modo IDLE hasta cada tick de 10 ms del **Timer1** (CTC, 100 Hz; el Timer0 se deja para `millis()`/`Keypad`); control cada 500 ms, teclado sondeado en cada tick.
-- **Reloj en software (solo hora del día, contador de 24 h; sin fecha, días ni años):** la hora vive en `ahoraG` y avanzan con el Timer1 (`relojAvanzar`); el DS1307 se lee al arrancar, se escribe al editar y se sincroniza una vez por minuto real (a x1 se lee; acelerado se escribe). Así el bus I2C casi solo lo usa el LCD. No volver a leer el RTC en cada ciclo: ralentiza Proteus.
-- **Pantalla 16x2 de la hora del DS1307** (`lcd2`, módulo `JHD-2X16-I2C` de Proteus con 4 pines en `0x3E` = `$7C` del I2C Debugger, opcional; si no responde se busca otra dirección; se maneja con controlador propio de comandos `jhd*` (byte de control 0x80/0x40) si `LCD2_JHD 1`, o con `LcdI2C` si 0; verificado en Proteus que ese módulo usa el protocolo de comandos y no el del PCF8574): `mostrarRtc()` lee el DS1307 cada segundo real. Con `velocidad > 1` se escribe el DS1307 cada segundo real para que coincida. `horaRtc` = lectura cruda; `ahoraG` = hora del sistema; `rtcCargar()` copia la primera en la segunda. Las direcciones I2C se escriben en 7 bits (el debugger muestra el valor × 2).
+- **Reloj en software (solo hora del día, contador de 24 h; sin fecha, días ni años):** la hora vive en `ahoraG` y avanza con el Timer1 (`relojAvanzar`). **No hay RTC externo**: al arrancar se fija a `HORA_ARRANQUE:MIN_ARRANQUE` (sin batería que la conserve) y se corrige a mano con `F1`. El bus I2C lo usan solo el LCD 20x4, el expansor de la alarma y el LCD 16x2 opcional — nunca el reloj.
+- **Pantalla 16x2 (hora del sistema)** (`lcd2`, módulo `JHD-2X16-I2C` de Proteus con 4 pines en `0x3E` = `$7C` del I2C Debugger, opcional; si no responde se busca otra dirección, excluyendo la del LCD 20x4 y la del expansor de la alarma; se maneja con controlador propio de comandos `jhd*` (byte de control 0x80/0x40) si `LCD2_JHD 1`, o con `LcdI2C` si 0; verificado en Proteus que ese módulo usa el protocolo de comandos y no el del PCF8574): `actualizarLcd2()` solo formatea `ahoraG` y lo manda a la pantalla — no toca el bus I2C más que para eso. Las direcciones I2C se escriben en 7 bits (el debugger muestra el valor × 2).
 - **Display de 7 segmentos (tiempo de riego, MM:SS):** 4 × 74HC595 en cadena con 4 × 7SEG-COM-CATHODE, estático (sin multiplexar), por D3 (SER), A3 (SRCLK) y D13 (RCLK). `riegoSeg` cuenta los segundos simulados de riego (se reinicia al empezar cada riego y conserva el valor al terminar). `DEPURAR 1` (define) imprime `[DBG]`, la causa del reinicio (`MCUSR`) y hace parpadear los dos puntos; poner 0 para la entrega. D3, A3 y D13 ya no están libres.
 - El LCD se repinta solo donde cambia (`pantallaLcd`, en `linea()`): evitar `lcd->clear()` o reescribir filas completas.
-- La velocidad del reloj (`velocidad`, x1/x10/x60/x300) se cambia en ejecución con `F2` o desde el menú. En la pantalla de estado: `F1` = hora, `F2` = velocidad. `FIJAR_HORA_AL_ARRANCAR` (define) fija las 05:55 al arrancar para demos repetibles; poner 0 y `velocidad = 1` para operación real. (Reemplaza al antiguo `MODO_DEMO`.)
+- La velocidad del reloj (`velocidad`, x1/x10/x60/x300) se cambia en ejecución con `F2` o desde el menú. En la pantalla de estado: `F1` = hora, `F2` = velocidad. Sin RTC, cada arranque fija `HORA_ARRANQUE:MIN_ARRANQUE` (ahora mismo 14:38) — no hay forma de "operación real" vs "demo" más que elegir `velocidad = 1`.
+- **Riego por humedad** (`PIN_HUMEDAD = A6`, potenciómetro que simula el sensor de suelo): `controlRiego()` combina horario **Y** humedad con histéresis (`cfg.humMin`/`cfg.humMax`), igual criterio que el umbral de luz. La pantalla `P_UMBRAL` se generalizó con `tipoUmbral` (0 = luz, 1 = humedad) en vez de duplicarla.
+- **Alarma armada por horario** (`V_ALARMA`, quinta ventana): mientras está armada, un sensor de intrusión (activo en BAJO) dispara un buzzer. Se arma/desarma con la tecla `3` en la pantalla de estado, que pide `CLAVE_ALARMA` (fija en el código, 4 dígitos) en la pantalla `P_CLAVE`. Buzzer y sensor van en un **segundo expansor I2C** (`PCF8574`/`PCF8574A`, `alarmaDir`, detectado como el del LCD pero excluido de esa búsqueda): P0 = buzzer, P1 = sensor (pull-up interno del PCF8574). Si no responde al arrancar, la alarma queda deshabilitada sin romper nada más.
 - Documentación: `README.md`, `PROTEUS.md`, `MANUAL_USUARIO.md` y `MANUAL_TECNICO.md`. Si cambian teclas, menú o pines, actualizar todos más el diagrama.
 
 ## Comandos
